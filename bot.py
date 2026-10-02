@@ -1,70 +1,112 @@
-import os, threading, logging
+import os
 from flask import Flask, request
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+import telebot
+from telebot import types
 
-logging.basicConfig(level=logging.INFO)
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # Put your bot token in Railway Variables
+bot = telebot.TeleBot(BOT_TOKEN)
+app = Flask(__name__)
 
-LINKS = {
-    "20": "https://u3.shortink.io/register?utm_campaign=868502&utm_source=affiliate&utm_medium=sr&a=jnLBWcb8IEyL7T&al=1801398&ac=wwpocket20&cid=984349",
-    "50": "https://u3.shortink.io/register?utm_campaign=868502&utm_source=affiliate&utm_medium=sr&a=jnLBWcb8IEyL7T&al=1801400&ac=wwpocket50&cid=984350",
-    "100": "https://u3.shortink.io/register?utm_campaign=868502&utm_source=affiliate&utm_medium=sr&a=jnLBWcb8IEyL7T&al=1801402&ac=wwpocket100&cid=984351"
-}
-USERS_DB = {}
+# Your affiliate link - WW
+BASE_AFF_LINK = "https://u3.shortink.io/smart/jnLBWcb8IEyL7T"
 
-app_flask = Flask(__name__)
+# Simple memory DB - replace with real DB later
+users_db = {}
 
-@app_flask.route("/")
-def home():
-    return "WW Pocket Bot is LIVE!"
-
-@app_flask.route("/pocket_postback")
-def pocket_postback():
-    subid = request.args.get("subid")
-    sum_depo = float(request.args.get("sum", 0) or 0)
-    if subid:
-        try:
-            USERS_DB[int(subid)] = {"deposit": sum_depo}
-            print(f"DEPOSIT CONFIRMED: {subid} -> ${sum_depo}")
-        except: pass
-    return "OK", 200
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    keyboard = [
-        [InlineKeyboardButton("🟢 Starter $20 - 20 Signals/Day", callback_data="tier_20")],
-        [InlineKeyboardButton("🔵 Pro $50 - 100 Signals/Day", callback_data="tier_50")],
-        [InlineKeyboardButton("👑 VIP $100 - Unlimited", callback_data="tier_100")],
-        [InlineKeyboardButton("✅ I Have Deposited", callback_data="check_depo")]
-    ]
-    await update.message.reply_text(f"Welcome to WW Pocket!\n\nYour ID: {uid}\nChoose plan to unlock signals:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    uid = query.from_user.id
-    await query.answer()
-    if query.data.startswith("tier_"):
-        tier = query.data.split("_")[1]
-        final_link = f"{LINKS[tier]}&subid={uid}"
-        keyboard = [[InlineKeyboardButton(f"💳 Deposit ${tier} Now", url=final_link)], [InlineKeyboardButton("✅ I Have Deposited", callback_data="check_depo")]]
-        await query.edit_message_text(f"Step 1: Deposit ${tier} via this tracked link:\n\n{final_link}\n\nStep 2: Click I Have Deposited after.", reply_markup=InlineKeyboardMarkup(keyboard))
+def get_level(total):
+    if total >= 100:
+        return "vip"
+    elif total >= 50:
+        return "pro"
     else:
-        data = USERS_DB.get(uid)
-        if data:
-            await query.edit_message_text(f"🎉 DEPOSIT CONFIRMED!\nAmount: ${data['deposit']}\n\nYou are now UNLOCKED for signals! ✅")
-        else:
-            await query.edit_message_text(f"⏳ Not yet seen. Your ID: {uid}\n\nMake sure you used the link with subid. Wait 2 mins after deposit then click again.")
+        return "starter"
 
-def run_flask():
-    port = int(os.getenv("PORT", 8080))
-    app_flask.run(host="0.0.0.0", port=port)
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+# --- THIS IS THE AUTOMATIC POSTBACK ---
+@app.route('/pocket_postback')
+def pocket_postback():
+    subid = request.args.get('subid')  # Telegram ID from CLICK_ID
+    sum_str = request.args.get('sum', '0')
+    try:
+        amount = float(sum_str)
+        tg_id = int(subid)
+    except:
+        return "invalid params", 400
+    
+    user = users_db.get(tg_id)
+    if not user:
+        # User not in bot yet, but we still store
+        users_db[tg_id] = {"total": 0}
+        user = users_db[tg_id]
+    
+    total = user.get("total", 0) + amount
+    user["total"] = total
+    user["level"] = get_level(total)
+    user["verified"] = True
+    
+    # Notify user in Telegram automatically
+    try:
+        level = user["level"].upper()
+        bot.send_message(tg_id, 
+            f"✅ *Deposit Confirmed!* ${amount}\n\n"
+            f"💰 Total Deposited: ${total}\n"
+            f"⭐ Your Level: {level}\n\n"
+            f"Level system:\n"
+            f"• Starter: $20+\n"
+            f"• Pro: $50+\n"
+            f"• VIP: $100+\n\n"
+            f"Send /signals to get signals!",
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        print(f"Error sending msg: {e}")
+    
+    return "ok", 200
+
+# --- TELEGRAM BOT ---
+@bot.message_handler(commands=['start'])
+def start(message):
+    tg_id = message.from_user.id
+    if tg_id not in users_db:
+        users_db[tg_id] = {"total": 0, "level": "none", "verified": False}
+    
+    # Create link WITH telegram ID
+    aff_link = f"{BASE_AFF_LINK}?click_id={tg_id}"
+    
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🔗 Create Pocket Account", url=aff_link))
+    markup.add(types.InlineKeyboardButton("✅ I Deposited - Check", callback_data="check"))
+    
+    bot.send_message(message.chat.id,
+        f"👋 Welcome! To activate bot:\n\n"
+        f"1. Click button below to register Pocket account\n"
+        f"2. Deposit minimum $20\n"
+        f"3. Bot will AUTO-DETECT deposit and upgrade you!\n\n"
+        f"Your ID: {tg_id}",
+        reply_markup=markup
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data == "check")
+def check(call):
+    tg_id = call.from_user.id
+    user = users_db.get(tg_id, {"total": 0, "level": "none"})
+    total = user.get("total", 0)
+    level = user.get("level", "none")
+    
+    if user.get("verified"):
+        bot.answer_callback_query(call.id, "Verified!")
+        bot.send_message(tg_id, f"✅ You are verified! Total: ${total} | Level: {level.upper()}")
+    else:
+        bot.answer_callback_query(call.id, "Not yet deposited")
+        bot.send_message(tg_id, f"⏳ Not yet detected. Total so far: ${total}\n\nMake sure you registered with link that has your ID: {tg_id}\nLink: {BASE_AFF_LINK}?click_id={tg_id}")
 
 if __name__ == "__main__":
-    # Flask in background for postback
-    threading.Thread(target=run_flask, daemon=True).start()
-    print("Starting Telegram Bot polling...")
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.run_polling()
+    # Run both bot and flask
+    import threading
+    def run_bot():
+        bot.infinity_polling()
+    threading.Thread(target=run_bot).start()
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
