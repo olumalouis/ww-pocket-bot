@@ -8,6 +8,7 @@ app = Flask(__name__)
 
 BASE_AFF_LINK = "https://u3.shortink.io/smart/jnLBWcb8IEyL7T"
 DB_FILE = "users.json"
+OWNER_ID = "8188622130" # YOUR OWNER ID - FULL ACCESS
 
 # Load DB
 def load_db():
@@ -39,7 +40,7 @@ def pocket_postback():
     sum_val = request.args.get('sum', '0')
     try:
         amount = float(sum_val)
-        tg_id = str(int(subid)) # save as string
+        tg_id = str(int(subid))
     except:
         return "invalid", 400
 
@@ -67,27 +68,17 @@ def start(m):
         users_db[tid] = {"total":0, "level":"none", "verified":False}
         save_db(users_db)
     link = f"{BASE_AFF_LINK}?click_id={m.from_user.id}"
-    bot.send_message(m.chat.id, f"👋 Welcome!\n\n1️⃣ Register: {link}\n2️⃣ Deposit $20+\n3️⃣ I auto-detect deposit\n\nYour ID: {m.from_user.id}\n\nCommands:\n/signals - Get signals\n/balance - Check level")
+    # Owner message
+    if tid == OWNER_ID:
+        bot.send_message(m.chat.id, f"👑 WELCOME OWNER!\nYour ID: {m.from_user.id}\n\nYou have FULL VIP ACCESS\n\nYour affiliate link:\n{link}\n\nCommands:\n/signals - Get VIP signals\n/balance - Check stats\n/users - See all users (owner only)")
+    else:
+        bot.send_message(m.chat.id, f"👋 Welcome!\n\n1️⃣ Register: {link}\n2️⃣ Deposit $20+\n3️⃣ I auto-detect deposit\n\nYour ID: {m.from_user.id}\n\nCommands:\n/signals - Get signals\n/balance - Check level")
 
 @bot.message_handler(commands=['balance'])
 def balance(m):
     tid = str(m.from_user.id)
     user = users_db.get(tid, {"total":0, "level":"none"})
-    bot.send_message(m.chat.id, f"💰 Balance: ${user.get('total',0)}\n🏆 Level: {user.get('level','none').upper()}\n✅ Verified: {user.get('verified',False)}")
+    is_owner = " (OWNER 👑)" if tid == OWNER_ID else ""
+    bot.send_message(m.chat.id, f"💰 Balance: ${user.get('total',0)}\n🏆 Level: {user.get('level','none').upper()}{is_owner}\n✅ Verified: {user.get('verified',False) or tid==OWNER_ID}")
 
-@bot.message_handler(commands=['signals'])
-def signals(m):
-    tid = str(m.from_user.id)
-    user = users_db.get(tid)
-    if not user or not user.get("verified"):
-        bot.send_message(m.chat.id, "❌ Not verified! Deposit $20 first.\nUse /start to get link")
-        return
-    level = user.get("level", "starter")
-    bot.send_message(m.chat.id, SIGNALS.get(level, SIGNALS["starter"]))
-
-if __name__ == "__main__":
-    import threading
-    def run_bot():
-        bot.infinity_polling()
-    threading.Thread(target=run_bot, daemon=True).start()
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+@bot.message_handler(commands=['signals
