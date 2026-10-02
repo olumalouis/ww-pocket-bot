@@ -8,10 +8,11 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
-#... KEEP ALL YOUR SAME CONFIG FROM BEFORE...
 BASE_AFF_LINK = "https://u3.shortink.io/smart/jnLBWcb8IEyL7T"
 DB_FILE = "users.json"
 OWNER_ID = "8188622130"
+POSTBACK_SECRET = os.getenv("POSTBACK_SECRET", "WW12345") # NEW LOCK
+
 ALL_PAIRS_REAL = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD", "EUR/JPY", "EUR/GBP", "NZD/USD", "EUR/AUD", "GBP/JPY", "BTC/USD", "ETH/USD"]
 ALL_PAIRS_OTC = ["EUR/USD OTC", "GBP/USD OTC", "USD/JPY OTC", "AUD/USD OTC", "EUR/JPY OTC", "GBP/JPY OTC", "BTC/USD OTC", "ETH/USD OTC", "EUR/GBP OTC", "USD/BRL OTC"]
 TIERS = {
@@ -19,6 +20,7 @@ TIERS = {
     "pro": {"pairs": ["EUR/USD", "USD/JPY", "GBP/USD", "AUD/USD", "USD/CAD", "EUR/JPY", "EUR/USD OTC", "GBP/USD OTC", "USD/JPY OTC", "AUD/USD OTC"], "expiry_real": ["1m", "2m", "3m"], "expiry_otc": ["15s", "30s", "1m", "2m", "3m"], "name": "PRO"},
     "vip": {"pairs": ALL_PAIRS_REAL + ALL_PAIRS_OTC, "expiry_real": ["1m", "2m", "3m", "5m"], "expiry_otc": ["15s", "30s", "1m", "2m", "3m", "5m"], "name": "VIP"}
 }
+
 def load_db():
     if os.path.exists(DB_FILE):
         try:
@@ -28,11 +30,13 @@ def load_db():
 def save_db(data):
     with open(DB_FILE, 'w') as f: json.dump(data, f)
 users_db = load_db()
+
 def get_user_level(tid):
     if str(tid) == OWNER_ID: return "vip"
     u = users_db.get(str(tid))
     if not u or not u.get("verified"): return None
     return u.get("level", "starter")
+
 def generate_signal_text(pair, expiry, level):
     action = random.choice(["BUY ⬆️", "SELL ⬇️"])
     conf = {"starter": random.randint(72,80), "pro": random.randint(81,88), "vip": random.randint(89,95)}[level]
@@ -40,7 +44,8 @@ def generate_signal_text(pair, expiry, level):
     return f"🎯 *{level.upper()} SIGNAL*\n\n💱 Pair: {pair}\n📊 Market: {market_type}\n⏰ Expiry: {expiry}\n📈 Action: {action}\n🔥 Confidence: {conf}%\nUTC: {datetime.utcnow().strftime('%H:%M')} UTC"
 
 @app.route('/')
-def home(): return "Bot Active Webhook!"
+def home(): return "Bot Active - Use /pocket_postback?secret=WW12345"
+
 @app.route(f'/{BOT_TOKEN}', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
@@ -49,9 +54,18 @@ def webhook():
         bot.process_new_updates([update])
         return ''
     else: return 'ok'
+
 @app.route('/pocket_postback')
 def pocket_postback():
-    subid = request.args.get('subid'); sum_val = request.args.get('sum', '0')
+    # === NEW SECURITY LOCK ===
+    secret = request.args.get('secret')
+    if secret!= POSTBACK_SECRET:
+        print(f"BLOCKED FAKE POSTBACK: {request.args} IP:{request.remote_addr}")
+        return "Blocked - wrong secret", 403
+    # === END LOCK ===
+
+    subid = request.args.get('subid') or request.args.get('click_id')
+    sum_val = request.args.get('sum', '0') or request.args.get('amount', '0')
     try:
         amount = float(sum_val); tg_id = str(int(float(subid)))
     except: return "invalid", 400
@@ -62,6 +76,7 @@ def pocket_postback():
     users_db[tg_id]=user; save_db(users_db)
     try: bot.send_message(int(tg_id), f"✅ Deposit ${amount} confirmed! Total: ${total} Level: {level.upper()} 🎉")
     except: pass
+    print(f"REAL DEPOSIT CREDITED: {tg_id} = ${amount}")
     return "ok", 200
 
 @bot.message_handler(commands=['start'])
@@ -100,10 +115,22 @@ def handle_get_signal_entry(m):
     kb=types.InlineKeyboardMarkup(row_width=2)
     kb.add(types.InlineKeyboardButton("🖐️ Manual", callback_data="mode_manual"),types.InlineKeyboardButton("🤖 Auto", callback_data="mode_auto"))
     bot.send_message(m.chat.id, f"🎯 Get Signal - {level.upper()}\nChoose mode:", reply_markup=kb, parse_mode="Markdown")
-@bot.message_handler(commands=['balance','signals','analyze'])
+@bot.message_handler(commands=['balance','signals','analyze','addvip'])
 def cmds(m):
+    tid=str(m.from_user.id)
     if m.text.startswith("/balance"): return handle_balance(m)
     if m.text.startswith("/signals"): return handle_get_signal_entry(m)
+    if m.text.startswith("/addvip") and tid==OWNER_ID:
+        try:
+            parts=m.text.split(); target=parts[1]
+            user=users_db.get(target, {"total":100,"level":"vip","verified":True,"referrals":0})
+            user["total"]=100; user["level"]="vip"; user["verified"]=True
+            users_db[target]=user; save_db(users_db)
+            bot.send_message(m.chat.id, f"✅ Added VIP to {target}")
+            try: bot.send_message(int(target), "🎉 You are now VIP! Use /signals")
+            except: pass
+        except: bot.send_message(m.chat.id, "Use: /addvip 123456789")
+        return
     if m.text.startswith("/analyze"):
         parts=m.text.split()
         if len(parts)<2: bot.send_message(m.chat.id, "Use: /analyze EUR/USD"); return
@@ -146,11 +173,9 @@ def callbacks(c):
         bot.send_message(c.message.chat.id, generate_signal_text(pair, exp, level), parse_mode="Markdown")
     bot.answer_callback_query(c.id)
 
-# WEBHOOK SETUP
 if __name__ == "__main__":
     bot.remove_webhook()
     import time; time.sleep(1)
-    # YOU MUST SET THIS TO YOUR RAILWAY URL!
     WEBHOOK_URL = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("WEBHOOK_URL")
     if WEBHOOK_URL:
         if not WEBHOOK_URL.startswith("https://"): WEBHOOK_URL = "https://" + WEBHOOK_URL
