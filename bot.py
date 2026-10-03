@@ -92,4 +92,4 @@ def check_limit(tid, lvl):
     used=u.get("signals_today",0)
     return used>=lim, used, lim
 
-def inc
+def inc_signal(tid):
