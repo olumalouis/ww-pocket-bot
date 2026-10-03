@@ -10,9 +10,7 @@ FILE="users.json"
 OWNER="8188622130"
 bot=telebot.TeleBot(TOKEN,threaded=False)
 app=Flask(__name__)
-# 15 REAL PAIRS
 REAL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/GBP","GBP/JPY","EUR/JPY","AUD/JPY","USD/CHF","EUR/AUD","GBP/AUD","EUR/CAD","NZD/USD","EUR/NZD"]
-# 30 OTC PAIRS
 OTC=["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","AUD/USD OTC","USD/CAD OTC","EUR/GBP OTC","EUR/JPY OTC","GBP/JPY OTC","AUD/JPY OTC","USD/CHF OTC","EUR/AUD OTC","GBP/AUD OTC","EUR/CAD OTC","NZD/USD OTC","USD/BRL OTC","USD/INR OTC","USD/EGP OTC","BTC/USD OTC","ETH/USD OTC","LTC/USD OTC","XRP/USD OTC","ADA/USD OTC","DOT/USD OTC","SOL/USD OTC","BNB/USD OTC","DOGE/USD OTC","AVAX/USD OTC","MATIC/USD OTC","TRX/USD OTC","SHIB/USD OTC"]
 EXP=["M1","M2","M3","M5"]
 def load():
@@ -51,7 +49,7 @@ def inc(tid):
  u=ensure(tid)
  if u: u["today"]=u.get("today",0)+1;db[str(tid)]=u;save(db)
 @app.route("/")
-def home(): return "V4.3 15 REAL 30 OTC AUTO NOTIFY OK",200
+def home(): return "V4.4 CLEARME OK",200
 @app.route("/pocket_postback")
 def pp():
  sec=request.args.get("secret")
@@ -70,11 +68,9 @@ def pp():
  u["total"]=tot;u["level"]=lvl
  if tot>=20: u["verified"]=True
  db[gid]=u;save(db)
- # --- NEW: AUTO TELEGRAM NOTIFICATION ---
  try:
   if amt>=20:
    bot.send_message(gid, f"🎉 Deposit Confirmed!\n\n💰 Amount: ${amt}\n💵 Total: ${tot}\n⭐ Level: {lvl.upper()}\n\n✅ You are now UNLOCKED!\n{'20 signals/day' if lvl=='starter' else '100 signals/day' if lvl=='pro' else 'UNLIMITED signals'}\n\nSend /start to get signals!")
-  # notify owner
   bot.send_message(OWNER, f"💰 NEW DEPOSIT!\nUser: {gid}\nAmount: ${amt}\nTotal: ${tot}\nLevel: {lvl}")
  except Exception as e:
   print(f"Notify error: {e}")
@@ -85,6 +81,35 @@ def webhook():
  up=telebot.types.Update.de_json(js)
  bot.process_new_updates([up])
  return "ok",200
+
+# --- NEW COMMANDS: /clearme /resetme /clear ---
+@bot.message_handler(commands=["clearme","resetme","clear","reset"])
+def clear_cmd(m):
+ tid=str(m.from_user.id)
+ args=m.text.split()
+ # /clear USER_ID for owner to clear others
+ if len(args)>1 and tid==OWNER:
+  target=args[1]
+  if target in db:
+   db[target]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False}
+   if target==OWNER:
+    db[target]["level"]="vip";db[target]["verified"]=True
+   save(db)
+   bot.send_message(m.chat.id,f"✅ Cleared {target} -> $0")
+  else:
+   bot.send_message(m.chat.id,f"User {target} not found")
+  return
+ # self clear
+ if tid in db:
+  is_owner = (tid==OWNER)
+  db[tid]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False}
+  if is_owner:
+   db[tid]["level"]="vip";db[tid]["verified"]=True
+  save(db)
+  bot.send_message(m.chat.id,f"✅ Your data cleared!\nTotal: $0\nLevel: {'vip (owner)' if is_owner else 'none (free)'}\n\nSend /start again")
+ else:
+  bot.send_message(m.chat.id,"You have no data")
+
 @bot.message_handler(commands=["start"])
 def start(m):
  tid=str(m.from_user.id)
@@ -98,7 +123,7 @@ def start(m):
  k.add(types.InlineKeyboardButton("💰 Deposit",callback_data="dep"),types.InlineKeyboardButton("📈 My Status",callback_data="bal"))
  k.add(types.InlineKeyboardButton("🔗 Register",url=LINK+"?click_id="+tid),types.InlineKeyboardButton("📞 Support",callback_data="sup"))
  if tid==OWNER: k.add(types.InlineKeyboardButton("👑 ADMIN PANEL",callback_data="admin"))
- bot.send_message(m.chat.id,f"WELCOME V4.3\nLevel: {lvl}\nREAL: 15 | OTC: 30\nBUY/SELL + Pair Select\nAuto Notify ON ✅\nLink: {LINK}?click_id={tid}",reply_markup=k)
+ bot.send_message(m.chat.id,f"WELCOME V4.4\nLevel: {lvl}\nREAL: 15 | OTC: 30\n/clearme to reset test\nLink: {LINK}?click_id={tid}",reply_markup=k)
 
 @bot.callback_query_handler(func=lambda c: True)
 def cb(c):
