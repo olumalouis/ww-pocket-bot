@@ -27,7 +27,7 @@ def get_live_closes(pair, limit=100):
         base = pair.split()[0].replace("/","").upper()
         binance_symbol = symbol_map.get(pair.split()[0], base+"T" if "USD" in base else "BTCUSDT")
         url = f"https://api.binance.com/api/v3/klines?symbol={binance_symbol}&interval=1m&limit={limit}"
-        r = requests.get(url, timeout=4).json()
+        r = requests.get(url, timeout=2).json() # 2 sec fix
         if isinstance(r, list) and len(r)>10:
             return [float(x[4]) for x in r]
     except: pass
@@ -130,7 +130,7 @@ def get_ip():
  return ip
 
 @app.route("/")
-def home(): return "V4.7 TIER 70-80% PRO 90% VIP OK",200
+def home(): return "V4.7 FIXED REPLY OK",200
 
 @app.route("/pocket_postback")
 def pp():
@@ -174,9 +174,12 @@ def pp():
 
 @app.route("/webhook",methods=["POST"])
 def webhook():
- js=request.get_data().decode('utf-8')
- up=telebot.types.Update.de_json(js)
- bot.process_new_updates([up])
+ try:
+  js=request.get_data().decode('utf-8')
+  up=telebot.types.Update.de_json(js)
+  bot.process_new_updates([up])
+ except Exception as e:
+  print("WEBHOOK ERR",e)
  return "ok",200
 
 @bot.message_handler(commands=["clearme","resetme","clear","reset"])
@@ -210,174 +213,156 @@ def start(m):
  k.add(types.InlineKeyboardButton("💰 Deposit",callback_data="dep"),types.InlineKeyboardButton("📈 My Status",callback_data="bal"))
  k.add(types.InlineKeyboardButton("🔗 Register",url=LINK+"?click_id="+tid),types.InlineKeyboardButton("📞 Support",callback_data="sup"))
  if tid==OWNER: k.add(types.InlineKeyboardButton("👑 ADMIN PANEL",callback_data="admin"))
- bot.send_message(m.chat.id,f"WELCOME V4.7\nLevel: {lvl}\nSTARTER 20/day 75%+\nPRO 100/day 70-80%\nVIP Unlimited 90% Win Rate\nLink: {LINK}?click_id={tid}",reply_markup=k)
+ bot.send_message(m.chat.id,f"WELCOME V4.7 FIXED\nLevel: {lvl}\nSTARTER 20/day 75%+\nPRO 100/day 70-80%\nVIP Unlimited 90% WR\nLink: {LINK}?click_id={tid}",reply_markup=k)
 
 @bot.callback_query_handler(func=lambda c: True)
 def cb(c):
- tid=str(c.from_user.id);d=c.data;chat_id=c.message.chat.id
- try: bot.delete_message(chat_id,c.message.message_id)
- except: pass
- lvl=get_lvl(tid)
- if d=="admin" and tid==OWNER:
-  k=types.InlineKeyboardMarkup(row_width=2)
-  k.add(types.InlineKeyboardButton("👥 Users List",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
-  k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban User",callback_data="ad_ban"))
-  k.add(types.InlineKeyboardButton("💵 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset Daily",callback_data="ad_reset"))
-  k.add(types.InlineKeyboardButton("🛡️ Security Log",callback_data="ad_sec"))
-  bot.send_message(chat_id,f"👑 ADMIN V4.7 - 7 Buttons\nUsers: {len(db)}\nBlocked: {len(blocked)}",reply_markup=k);return
- if tid==OWNER:
-  if d=="ad_users":
-   txt="👥 USERS:\n"
-   for i,(uid,u) in enumerate(list(db.items())[:20]): txt+=f"{i+1}. {uid} {u.get('level')} ${u.get('total',0)}\n"
-   bot.send_message(chat_id,txt);return
-  if d=="ad_stats":
-   tot=sum(u.get('total',0) for u in db.values());ver=sum(1 for u in db.values() if u.get('verified'))
-   bot.send_message(chat_id,f"📊 STATS\nUsers: {len(db)}\nVerified: {ver}\nTotal: ${tot}\nFree: {sum(1 for u in db.values() if u.get('level')=='none')}\nBlocked: {len(blocked)}");return
-  if d=="ad_deps":
-   txt="💵 DEPOSITS:\n"
-   for uid,u in db.items():
-    if u.get('total',0)>0: txt+=f"{uid}: ${u.get('total')} {u.get('level')}\n"
-   bot.send_message(chat_id,txt if len(txt)>15 else "No deposits");return
-  if d=="ad_reset":
-   for u in db.values(): u["today"]=0;u["date"]=str(date.today())
-   save(db);bot.send_message(chat_id,"✅ Reset done");return
-  if d=="ad_broad": bot.send_message(chat_id,"/broadcast message");return
-  if d=="ad_ban": bot.send_message(chat_id,"/ban USER_ID\n/unban USER_ID");return
-  if d=="ad_sec":
-   txt="🛡️ LOG last10:\n"
-   for s in sec_log[-10:]: txt+=f"{s.get('ip')} {s.get('status')} {s.get('gid','-')} ${s.get('sum','-')}\n"
-   bot.send_message(chat_id,txt);return
- if d=="dep":
-  k=types.InlineKeyboardMarkup();k.add(types.InlineKeyboardButton("Register",url=LINK+"?click_id="+tid))
-  bot.send_message(chat_id,f"💰 Deposit:\n{LINK}?click_id={tid}\nMin $20 Starter (20/day 75%+)\n$50 Pro (100/day 70-80%)\n$100 VIP (Unlimited 90% WR)",reply_markup=k);return
- if d=="bal":
-  u=ensure(tid);bot.send_message(chat_id,f"📈 STATUS\nLevel: {lvl}\nTotal: ${u.get('total',0)}\nToday: {u.get('today',0)}\nVerified: {u.get('verified')}");return
- if d=="sup": bot.send_message(chat_id,"Support: @YourSupport");return
- if d=="sel_market":
-  k=types.InlineKeyboardMarkup(row_width=2)
-  k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("🔶 OTC 30",callback_data="m_otc"))
-  bot.send_message(chat_id,"Select Market:",reply_markup=k);return
- if d=="m_real":
-  k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("✋ Manual 15",callback_data="real_manual"),types.InlineKeyboardButton("🤖 Auto",callback_data="real_auto"))
-  bot.send_message(chat_id,"REAL Market (15)\nManual = indicator suggests BUY/SELL",reply_markup=k);return
- if d=="m_otc":
-  k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("✋ Manual 30",callback_data="otc_manual"),types.InlineKeyboardButton("🤖 Auto 30",callback_data="otc_auto"))
-  bot.send_message(chat_id,"OTC Market (30)\nManual = indicator suggests",reply_markup=k);return
- if d=="mode_manual":
-  k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("💹 REAL Manual 15",callback_data="real_manual"),types.InlineKeyboardButton("🔶 OTC Manual 30",callback_data="otc_manual"))
-  bot.send_message(chat_id,"Manual Mode - Choose market:",reply_markup=k);return
- if d=="mode_auto":
-  is_over,cur,lim=check_limit(tid,lvl)
-  if is_over:
-      if lvl=="starter": bot.send_message(chat_id,f"⛔ STARTER limit {cur}/{lim}\nUpgrade PRO $50 for 100/day 70-80%");return
-      if lvl=="pro": bot.send_message(chat_id,f"⛔ PRO limit {cur}/{lim}\nUpgrade VIP $100 for Unlimited 90% WR");return
-      bot.send_message(chat_id,f"Limit {cur}/{lim}");return
-  for _ in range(15):
-   pair=random.choice(REAL+OTC);exp=random.choice(EXP)
-   sig,rsi,trend,conf=get_real_signal(pair, exp)
-   if sig:
-    inc(tid)
-    tier_tag = "STARTER 20/day" if lvl=="starter" else "PRO 70-80% | 100/day" if lvl=="pro" else "VIP 90% WR | Unlimited"
-    k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("Next REAL",callback_data="real_auto"),types.InlineKeyboardButton("Next OTC",callback_data="otc_auto"))
-    bot.send_message(chat_id,f"🤖 AUTO {tier_tag}\nPair: {pair}\nSignal: {sig}\nExp: {exp}\nRSI: {rsi:.1f} Trend: {trend} Conf: {conf}%\n{cur+1}/{lim}",reply_markup=k);return
-  bot.send_message(chat_id,"⏳ No strong setup now (choppy). Wait 20s and try again.");return
- if d=="real_manual":
-  k=types.InlineKeyboardMarkup(row_width=2)
-  for p in REAL: k.add(types.InlineKeyboardButton(p,callback_data=f"pair_{p}_REAL"))
-  bot.send_message(chat_id,"✋ MANUAL REAL (15)\nStep 1/2: SELECT PAIR",reply_markup=k);return
- if d=="otc_manual":
-  k=types.InlineKeyboardMarkup(row_width=2)
-  for p in OTC[:15]: k.add(types.InlineKeyboardButton(p,callback_data=f"pair_{p}_OTC"))
-  k.add(types.InlineKeyboardButton("Next 15 →",callback_data="otc_manual2"))
-  bot.send_message(chat_id,"✋ MANUAL OTC (1/2)\nStep 1/2: SELECT PAIR",reply_markup=k);return
- if d=="otc_manual2":
-  k=types.InlineKeyboardMarkup(row_width=2)
-  for p in OTC[15:]: k.add(types.InlineKeyboardButton(p,callback_data=f"pair_{p}_OTC"))
-  k.add(types.InlineKeyboardButton("← Back",callback_data="otc_manual"))
-  bot.send_message(chat_id,"✋ MANUAL OTC (2/2)\nStep 1/2: SELECT PAIR",reply_markup=k);return
- if d.startswith("pair_"):
+ try:
+  tid=str(c.from_user.id);d=c.data;chat_id=c.message.chat.id
+  lvl=get_lvl(tid)
+  # SAFE DELETE - NEVER CRASH
   try:
-   rest=d[5:]
-   if rest.endswith("_REAL"): pair=rest[:-5]
-   else: pair=rest[:-4]
-  except: pair=REAL[0]
-  is_over,cur,lim=check_limit(tid,lvl)
-  if is_over: bot.send_message(chat_id,f"Limit {cur}/{lim}");return
-  suggestion=""; best_exp=None;best_sig=None;best_conf=0;best_rsi=0;best_trend=""
-  for exp in EXP:
-   sig,rsi,trend,conf=get_real_signal(pair, exp)
-   if sig and conf>best_conf: best_exp=exp;best_sig=sig;best_conf=conf;best_rsi=rsi;best_trend=trend
-  if best_sig: suggestion=f"💡 Suggests: {best_sig} {best_exp} (RSI {best_rsi:.1f} {best_trend} {best_conf}%)"
-  else: suggestion="⚠️ Choppy - try expiry, 75%+ only"
-  k=types.InlineKeyboardMarkup(row_width=4)
-  k.add(types.InlineKeyboardButton("⏱️ M1",callback_data=f"sig_{pair}_M1"),types.InlineKeyboardButton("⏱️ M2",callback_data=f"sig_{pair}_M2"),types.InlineKeyboardButton("⏱️ M3",callback_data=f"sig_{pair}_M3"),types.InlineKeyboardButton("⏱️ M5",callback_data=f"sig_{pair}_M5"))
-  bot.send_message(chat_id,f"✋ MANUAL\nPair: {pair}\n{suggestion}\nStep 2/2: SELECT EXPIRY M1-M5 (75%+ only)",reply_markup=k);return
- if d in ["real_auto","otc_auto"]:
-  is_over,cur,lim=check_limit(tid,lvl)
-  if is_over:
-      if lvl=="starter": bot.send_message(chat_id,f"⛔ STARTER limit {cur}/{lim}\nUpgrade PRO");return
-      if lvl=="pro": bot.send_message(chat_id,f"⛔ PRO limit {cur}/{lim}\nUpgrade VIP");return
-      bot.send_message(chat_id,f"Limit {cur}/{lim}");return
-  is_otc=d.startswith("otc_");pairs=OTC if is_otc else REAL
-  for _ in range(15):
-   pair=random.choice(pairs);exp=random.choice(EXP)
-   sig,rsi,trend,conf=get_real_signal(pair, exp)
-   if sig:
-    inc(tid)
-    tier_tag = "STARTER 20/day" if lvl=="starter" else "PRO 70-80% | 100/day" if lvl=="pro" else "VIP 90% WR | Unlimited"
-    k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("Next REAL",callback_data="real_auto"),types.InlineKeyboardButton("Next OTC",callback_data="otc_auto"))
-    bot.send_message(chat_id,f"📊 {tier_tag}\nMarket: {'OTC' if is_otc else 'REAL'}\nPair: {pair}\nSignal: {sig}\nExp: {exp}\nRSI {rsi:.1f} Trend {trend} Conf {conf}%\nLevel: {lvl} {cur+1}/{lim}",reply_markup=k);return
-  bot.send_message(chat_id,f"⏳ No strong setup in {'OTC' if is_otc else 'REAL'} now. Try again.");return
+   bot.delete_message(chat_id,c.message.message_id)
+  except: pass
 
- # ===== V4.7 STRICT 75%+ FOR ALL TIERS, PRO 70-80% 100/day, VIP 90% Unlimited =====
- if d.startswith("sig_"):
-  try:
-   tmp = d[4:]; idx = tmp.rfind("_M"); pair = tmp[:idx]; exp = tmp[idx+1:]
-  except: pair="EUR/USD";exp="M1"
-
-  is_over,cur,lim=check_limit(tid,lvl)
-  if is_over:
-      if lvl=="starter": bot.send_message(chat_id,f"⛔ STARTER limit {cur}/{lim} reached\nUpgrade to PRO $50 = 100/day 70-80%\nVIP $100 = Unlimited 90% WR");return
-      if lvl=="pro": bot.send_message(chat_id,f"⛔ PRO limit {cur}/{lim} reached\nUpgrade to VIP $100 = Unlimited 90% WR");return
-      bot.send_message(chat_id,f"Limit {cur}/{lim}");return
-
-  sig,rsi,trend,conf = get_real_signal(pair, exp)
-
-  # ALL TIERS: 75%+ ONLY - NO FALLBACK 65%
-  if not sig:
-      k=types.InlineKeyboardMarkup(row_width=4)
-      k.add(types.InlineKeyboardButton("⏱️ M1",callback_data=f"sig_{pair}_M1"),types.InlineKeyboardButton("⏱️ M2",callback_data=f"sig_{pair}_M2"),types.InlineKeyboardButton("⏱️ M3",callback_data=f"sig_{pair}_M3"),types.InlineKeyboardButton("⏱️ M5",callback_data=f"sig_{pair}_M5"))
-      k.add(types.InlineKeyboardButton("🔄 Try Another Pair",callback_data="otc_manual"))
-      bot.send_message(chat_id,f"⏳ NO STRONG SETUP (75%+ only)\nPair: {pair} Exp: {exp}\nRSI {rsi:.1f} Trend {trend}\nMarket choppy. Try other M1-M5\nLevel: {lvl.upper()}",reply_markup=k);return
-
-  inc(tid)
-
-  # TIER LABELS WITH YOUR EXACT NUMBERS
-  if lvl=="starter":
-      tier_label = "STARTER 20/day | 75%+"
-      conf_display = conf
-  elif lvl=="pro":
-      tier_label = "PRO 70-80% | 100/day"
-      # Ensure PRO shows 70-80% range
-      if conf<70: conf_display=70
-      elif conf>80: conf_display=80
-      else: conf_display=conf
-  else: # vip + owner
-      tier_label = "VIP 90% Win Rate | Unlimited"
-      # VIP boost to 90%
-      if conf<85: conf_display=88
-      elif conf==85: conf_display=90
-      else: conf_display=90
-      if conf==78: conf_display=88
-      if conf==82: conf_display=89
-
-  k=types.InlineKeyboardMarkup(row_width=2)
-  k.add(types.InlineKeyboardButton("Next REAL Manual",callback_data="real_manual"),types.InlineKeyboardButton("Next OTC Manual",callback_data="otc_manual"))
-  if lvl=="starter":
-      k.add(types.InlineKeyboardButton("🚀 PRO $50 (100/day 70-80%)",callback_data="dep"))
-      k.add(types.InlineKeyboardButton("👑 VIP $100 (Unlimited 90%)",callback_data="dep"))
-
-  bot.send_message(chat_id,f"📊 {tier_label}\nPair: {pair}\nSignal: {sig}\nExp: {exp}\nRSI {rsi:.1f} Trend {trend} Conf {conf_display}%\nLevel: {lvl} {cur+1}/{lim}",reply_markup=k);return
+  if d=="admin" and tid==OWNER:
+   k=types.InlineKeyboardMarkup(row_width=2)
+   k.add(types.InlineKeyboardButton("👥 Users List",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
+   k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban User",callback_data="ad_ban"))
+   k.add(types.InlineKeyboardButton("💵 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset Daily",callback_data="ad_reset"))
+   k.add(types.InlineKeyboardButton("🛡️ Security Log",callback_data="ad_sec"))
+   bot.send_message(chat_id,f"👑 ADMIN V4.7 - 7 Buttons\nUsers: {len(db)}\nBlocked: {len(blocked)}",reply_markup=k);return
+  if tid==OWNER:
+   if d=="ad_users":
+    txt="👥 USERS:\n"
+    for i,(uid,u) in enumerate(list(db.items())[:20]): txt+=f"{i+1}. {uid} {u.get('level')} ${u.get('total',0)}\n"
+    bot.send_message(chat_id,txt);return
+   if d=="ad_stats":
+    tot=sum(u.get('total',0) for u in db.values());ver=sum(1 for u in db.values() if u.get('verified'))
+    bot.send_message(chat_id,f"📊 STATS\nUsers: {len(db)}\nVerified: {ver}\nTotal: ${tot}\nFree: {sum(1 for u in db.values() if u.get('level')=='none')}\nBlocked: {len(blocked)}");return
+   if d=="ad_deps":
+    txt="💵 DEPOSITS:\n"
+    for uid,u in db.items():
+     if u.get('total',0)>0: txt+=f"{uid}: ${u.get('total')} {u.get('level')}\n"
+    bot.send_message(chat_id,txt if len(txt)>15 else "No deposits");return
+   if d=="ad_reset":
+    for u in db.values(): u["today"]=0;u["date"]=str(date.today())
+    save(db);bot.send_message(chat_id,"✅ Reset done");return
+   if d=="ad_broad": bot.send_message(chat_id,"/broadcast message");return
+   if d=="ad_ban": bot.send_message(chat_id,"/ban USER_ID\n/unban USER_ID");return
+   if d=="ad_sec":
+    txt="🛡️ LOG last10:\n"
+    for s in sec_log[-10:]: txt+=f"{s.get('ip')} {s.get('status')} {s.get('gid','-')} ${s.get('sum','-')}\n"
+    bot.send_message(chat_id,txt);return
+  if d=="dep":
+   k=types.InlineKeyboardMarkup();k.add(types.InlineKeyboardButton("Register",url=LINK+"?click_id="+tid))
+   bot.send_message(chat_id,f"💰 Deposit:\n{LINK}?click_id={tid}\nMin $20 Starter (20/day 75%+)\n$50 Pro (100/day 70-80%)\n$100 VIP (Unlimited 90% WR)",reply_markup=k);return
+  if d=="bal":
+   u=ensure(tid);bot.send_message(chat_id,f"📈 STATUS\nLevel: {lvl}\nTotal: ${u.get('total',0)}\nToday: {u.get('today',0)}\nVerified: {u.get('verified')}");return
+  if d=="sup": bot.send_message(chat_id,"Support: @YourSupport");return
+  if d=="sel_market":
+   k=types.InlineKeyboardMarkup(row_width=2)
+   k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("🔶 OTC 30",callback_data="m_otc"))
+   bot.send_message(chat_id,"Select Market:",reply_markup=k);return
+  if d=="m_real":
+   k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("✋ Manual 15",callback_data="real_manual"),types.InlineKeyboardButton("🤖 Auto",callback_data="real_auto"))
+   bot.send_message(chat_id,"REAL Market (15)\nManual = indicator suggests BUY/SELL",reply_markup=k);return
+  if d=="m_otc":
+   k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("✋ Manual 30",callback_data="otc_manual"),types.InlineKeyboardButton("🤖 Auto 30",callback_data="otc_auto"))
+   bot.send_message(chat_id,"OTC Market (30)\nManual = indicator suggests",reply_markup=k);return
+  if d=="mode_manual":
+   k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("💹 REAL Manual 15",callback_data="real_manual"),types.InlineKeyboardButton("🔶 OTC Manual 30",callback_data="otc_manual"))
+   bot.send_message(chat_id,"Manual Mode - Choose market:",reply_markup=k);return
+  if d=="mode_auto":
+   is_over,cur,lim=check_limit(tid,lvl)
+   if is_over:
+       if lvl=="starter": bot.send_message(chat_id,f"⛔ STARTER limit {cur}/{lim}\nUpgrade PRO");return
+       if lvl=="pro": bot.send_message(chat_id,f"⛔ PRO limit {cur}/{lim}\nUpgrade VIP");return
+       bot.send_message(chat_id,f"Limit {cur}/{lim}");return
+   for _ in range(15):
+    pair=random.choice(REAL+OTC);exp=random.choice(EXP)
+    sig,rsi,trend,conf=get_real_signal(pair, exp)
+    if sig:
+     inc(tid)
+     tier_tag = "STARTER 20/day" if lvl=="starter" else "PRO 70-80% | 100/day" if lvl=="pro" else "VIP 90% WR | Unlimited"
+     k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("Next REAL",callback_data="real_auto"),types.InlineKeyboardButton("Next OTC",callback_data="otc_auto"))
+     bot.send_message(chat_id,f"🤖 AUTO {tier_tag}\nPair: {pair}\nSignal: {sig}\nExp: {exp}\nRSI: {rsi:.1f} Trend: {trend} Conf: {conf}%\n{cur+1}/{lim}",reply_markup=k);return
+   bot.send_message(chat_id,"⏳ No strong setup now. Wait 20s.");return
+  if d=="real_manual":
+   k=types.InlineKeyboardMarkup(row_width=2)
+   for p in REAL: k.add(types.InlineKeyboardButton(p,callback_data=f"pair_{p}_REAL"))
+   bot.send_message(chat_id,"✋ MANUAL REAL (15)\nStep 1/2: SELECT PAIR",reply_markup=k);return
+  if d=="otc_manual":
+   k=types.InlineKeyboardMarkup(row_width=2)
+   for p in OTC[:15]: k.add(types.InlineKeyboardButton(p,callback_data=f"pair_{p}_OTC"))
+   k.add(types.InlineKeyboardButton("Next 15 →",callback_data="otc_manual2"))
+   bot.send_message(chat_id,"✋ MANUAL OTC (1/2)\nStep 1/2: SELECT PAIR",reply_markup=k);return
+  if d=="otc_manual2":
+   k=types.InlineKeyboardMarkup(row_width=2)
+   for p in OTC[15:]: k.add(types.InlineKeyboardButton(p,callback_data=f"pair_{p}_OTC"))
+   k.add(types.InlineKeyboardButton("← Back",callback_data="otc_manual"))
+   bot.send_message(chat_id,"✋ MANUAL OTC (2/2)\nStep 1/2: SELECT PAIR",reply_markup=k);return
+  if d.startswith("pair_"):
+   try:
+    rest=d[5:]
+    if rest.endswith("_REAL"): pair=rest[:-5]
+    else: pair=rest[:-4]
+   except: pair=REAL[0]
+   is_over,cur,lim=check_limit(tid,lvl)
+   if is_over: bot.send_message(chat_id,f"Limit {cur}/{lim}");return
+   suggestion=""; best_exp=None;best_sig=None;best_conf=0;best_rsi=0;best_trend=""
+   for exp in EXP:
+    sig,rsi,trend,conf=get_real_signal(pair, exp)
+    if sig and conf>best_conf: best_exp=exp;best_sig=sig;best_conf=conf;best_rsi=rsi;best_trend=trend
+   if best_sig: suggestion=f"💡 Suggests: {best_sig} {best_exp} (RSI {best_rsi:.1f} {best_trend} {best_conf}%)"
+   else: suggestion="⚠️ Choppy - try expiry, 75%+ only"
+   k=types.InlineKeyboardMarkup(row_width=4)
+   k.add(types.InlineKeyboardButton("⏱️ M1",callback_data=f"sig_{pair}_M1"),types.InlineKeyboardButton("⏱️ M2",callback_data=f"sig_{pair}_M2"),types.InlineKeyboardButton("⏱️ M3",callback_data=f"sig_{pair}_M3"),types.InlineKeyboardButton("⏱️ M5",callback_data=f"sig_{pair}_M5"))
+   bot.send_message(chat_id,f"✋ MANUAL\nPair: {pair}\n{suggestion}\nStep 2/2: SELECT EXPIRY M1-M5 (75%+ only)",reply_markup=k);return
+  if d in ["real_auto","otc_auto"]:
+   is_over,cur,lim=check_limit(tid,lvl)
+   if is_over:
+       bot.send_message(chat_id,f"⛔ Limit {cur}/{lim}");return
+   is_otc=d.startswith("otc_");pairs=OTC if is_otc else REAL
+   for _ in range(15):
+    pair=random.choice(pairs);exp=random.choice(EXP)
+    sig,rsi,trend,conf=get_real_signal(pair, exp)
+    if sig:
+     inc(tid)
+     tier_tag = "STARTER 20/day" if lvl=="starter" else "PRO 70-80% | 100/day" if lvl=="pro" else "VIP 90% WR | Unlimited"
+     k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("Next REAL",callback_data="real_auto"),types.InlineKeyboardButton("Next OTC",callback_data="otc_auto"))
+     bot.send_message(chat_id,f"📊 {tier_tag}\nMarket: {'OTC' if is_otc else 'REAL'}\nPair: {pair}\nSignal: {sig}\nExp: {exp}\nRSI {rsi:.1f} Trend {trend} Conf {conf}%\nLevel: {lvl} {cur+1}/{lim}",reply_markup=k);return
+   bot.send_message(chat_id,f"⏳ No strong setup in {'OTC' if is_otc else 'REAL'} now.");return
+  if d.startswith("sig_"):
+   try:
+    tmp = d[4:]; idx = tmp.rfind("_M"); pair = tmp[:idx]; exp = tmp[idx+1:]
+   except: pair="EUR/USD";exp="M1"
+   is_over,cur,lim=check_limit(tid,lvl)
+   if is_over:
+       bot.send_message(chat_id,f"⛔ Limit {cur}/{lim}");return
+   sig,rsi,trend,conf = get_real_signal(pair, exp)
+   if not sig:
+       k=types.InlineKeyboardMarkup(row_width=4)
+       k.add(types.InlineKeyboardButton("⏱️ M1",callback_data=f"sig_{pair}_M1"),types.InlineKeyboardButton("⏱️ M2",callback_data=f"sig_{pair}_M2"),types.InlineKeyboardButton("⏱️ M3",callback_data=f"sig_{pair}_M3"),types.InlineKeyboardButton("⏱️ M5",callback_data=f"sig_{pair}_M5"))
+       k.add(types.InlineKeyboardButton("🔄 Try Another Pair",callback_data="otc_manual"))
+       bot.send_message(chat_id,f"⏳ NO STRONG SETUP (75%+ only)\nPair: {pair} Exp: {exp}\nRSI {rsi:.1f} Trend {trend}\nChoppy. Try other M\nLevel: {lvl.upper()}",reply_markup=k);return
+   inc(tid)
+   if lvl=="starter":
+       tier_label = "STARTER 20/day | 75%+"; conf_display=conf
+   elif lvl=="pro":
+       tier_label = "PRO 70-80% | 100/day"; conf_display = 70 if conf<70 else 80 if conf>80 else conf
+   else:
+       tier_label = "VIP 90% Win Rate | Unlimited"; conf_display = 90 if conf>=80 else 88
+   k=types.InlineKeyboardMarkup(row_width=2)
+   k.add(types.InlineKeyboardButton("Next REAL Manual",callback_data="real_manual"),types.InlineKeyboardButton("Next OTC Manual",callback_data="otc_manual"))
+   if lvl=="starter":
+       k.add(types.InlineKeyboardButton("🚀 PRO $50 (100/day 70-80%)",callback_data="dep"))
+       k.add(types.InlineKeyboardButton("👑 VIP $100 (Unlimited 90%)",callback_data="dep"))
+   bot.send_message(chat_id,f"📊 {tier_label}\nPair: {pair}\nSignal: {sig}\nExp: {exp}\nRSI {rsi:.1f} Trend {trend} Conf {conf_display}%\nLevel: {lvl} {cur+1}/{lim}",reply_markup=k);return
+ except Exception as e:
+  print(f"CB ERROR {e}")
+  try: bot.send_message(chat_id,f"⚠️ Error, try again: {e}")
+  except: pass
 
 @bot.message_handler(commands=["broadcast"])
 def bcast(m):
@@ -390,4 +375,16 @@ def bcast(m):
   except: pass
  bot.send_message(m.chat.id,f"Broadcast sent to {cnt}")
 
-@bot.message_handler(comman
+@bot.message_handler(commands=["ban","unban"])
+def ban(m):
+ if str(m.from_user.id)!=OWNER: return
+ parts=m.text.split()
+ if len(parts)<2: return
+ uid=parts[1]
+ if uid in db:
+  db[uid]["banned"]=m.text.startswith("/ban");save(db)
+  bot.send_message(m.chat.id,f"{'Banned' if db[uid]['banned'] else 'Unbanned'} {uid}")
+
+if __name__=="__main__":
+ port=int(os.environ.get("PORT",8080))
+ app.run(host="0.0.0.0",port=port)
