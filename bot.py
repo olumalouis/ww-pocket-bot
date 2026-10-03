@@ -16,18 +16,19 @@ SECRET=os.getenv("POSTBACK_SECRET","WW12345")
 REAL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/JPY","EUR/GBP","NZD/USD","EUR/AUD","GBP/JPY","BTC/USD","ETH/USD"]
 OTC=["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","AUD/USD OTC","EUR/JPY OTC","GBP/JPY OTC","BTC/USD OTC","ETH/USD OTC","EUR/GBP OTC","USD/BRL OTC","USD/INR OTC","USD/EGP OTC","USD/PKR OTC","USD/ARS OTC","USD/BDT OTC","USD/TRY OTC","USD/PHP OTC","NZD/USD OTC","EUR/AUD OTC","GBP/AUD OTC"]
 
-# === V3.4 AUTO DELETE SYSTEM ===
-last_bot_msg = {} # chat_id: msg_id
+last_bot_msg = {}
 
 def clean_chat(chat_id, user_msg_id=None):
     try:
         if user_msg_id:
             bot.delete_message(chat_id, user_msg_id)
-    except: pass
+    except:
+        pass
     try:
         if chat_id in last_bot_msg:
             bot.delete_message(chat_id, last_bot_msg[chat_id])
-    except: pass
+    except:
+        pass
 
 def send_clean(chat_id, text, reply_markup=None):
     try:
@@ -38,181 +39,155 @@ def send_clean(chat_id, text, reply_markup=None):
         print(f"send_clean fail {e}")
 
 def load():
- if os.path.exists(FILE):
-  try:
-   with open(FILE) as f:
-    return json.load(f)
-  except:
-   return {}
- return {}
+    if os.path.exists(FILE):
+        try:
+            with open(FILE) as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
 def save(d):
- with open(FILE,"w") as f:
-  json.dump(d,f,indent=2)
+    with open(FILE,"w") as f:
+        json.dump(d,f,indent=2)
+
 db=load()
 
 def ensure(tid):
- u=db.get(str(tid))
- if not u:
-  return None
- if "today" not in u: u["today"]=0
- if "date" not in u: u["date"]=str(date.today())
- if "streak" not in u: u["streak"]=0
- if "banned" not in u: u["banned"]=False
- if "total" not in u: u["total"]=0
- if "level" not in u: u["level"]="none"
- if "verified" not in u: u["verified"]=False
- if "refs" not in u: u["refs"]=0
- if str(tid)==OWNER:
-  u["level"]="vip"
-  u["verified"]=True
-  u["banned"]=False
- if u.get("date")!=str(date.today()):
-  u["today"]=0
-  u["date"]=str(date.today())
- db[str(tid)]=u
- save(db)
- return u
+    u=db.get(str(tid))
+    if not u:
+        return None
+    if "today" not in u: u["today"]=0
+    if "date" not in u: u["date"]=str(date.today())
+    if "streak" not in u: u["streak"]=0
+    if "banned" not in u: u["banned"]=False
+    if "total" not in u: u["total"]=0
+    if "level" not in u: u["level"]="none"
+    if "verified" not in u: u["verified"]=False
+    if "refs" not in u: u["refs"]=0
+    if str(tid)==OWNER:
+        u["level"]="vip"
+        u["verified"]=True
+        u["banned"]=False
+    if u.get("date")!=str(date.today()):
+        u["today"]=0
+        u["date"]=str(date.today())
+    db[str(tid)]=u
+    save(db)
+    return u
 
 def get_lvl(tid):
- if str(tid)==OWNER: return "vip"
- u=db.get(str(tid))
- if not u: return None
- ensure(tid)
- if u.get("banned"): return "banned"
- if not u.get("verified"): return None
- return u.get("level","starter")
+    if str(tid)==OWNER:
+        return "vip"
+    u=db.get(str(tid))
+    if not u:
+        return None
+    ensure(tid)
+    if u.get("banned"):
+        return "banned"
+    if not u.get("verified"):
+        return None
+    return u.get("level","starter")
 
 def check(tid,lvl):
- u=ensure(tid)
- if not u: return False,0,5
- lim=5
- if lvl=="starter": lim=20
- if lvl=="pro": lim=100
- if lvl=="vip": lim=999999
- used=u.get("today",0)
- return used>=lim,used,lim
+    u=ensure(tid)
+    if not u:
+        return False,0,5
+    lim=5
+    if lvl=="starter": lim=20
+    if lvl=="pro": lim=100
+    if lvl=="vip": lim=999999
+    used=u.get("today",0)
+    return used>=lim,used,lim
 
 def inc(tid):
- u=ensure(tid)
- if u:
-  u["today"]=u.get("today",0)+1
-  db[str(tid)]=u
-  save(db)
+    u=ensure(tid)
+    if u:
+        u["today"]=u.get("today",0)+1
+        db[str(tid)]=u
+        save(db)
 
 def gen(pair,exp,lvl):
- cmin=75; cmax=82
- if lvl=="pro": cmin=82; cmax=89
- if lvl=="vip": cmin=89; cmax=95
- act=random.choice(["BUY UP","SELL DOWN"])
- conf=random.randint(cmin,cmax)
- mt="OTC" if "OTC" in pair else "REAL"
- txt=f"🎯 {lvl.upper()} SIGNAL\nPair {pair}\nMarket {mt}\nExpiry {exp}\nAction {act}\nConf {conf}%\nUTC {datetime.utcnow().strftime('%H:%M')}"
- return txt,conf
+    cmin=75
+    cmax=82
+    if lvl=="pro":
+        cmin=82
+        cmax=89
+    if lvl=="vip":
+        cmin=89
+        cmax=95
+    act=random.choice(["BUY UP","SELL DOWN"])
+    conf=random.randint(cmin,cmax)
+    mt="OTC" if "OTC" in pair else "REAL"
+    txt=f"🎯 {lvl.upper()} SIGNAL\nPair {pair}\nMarket {mt}\nExpiry {exp}\nAction {act}\nConf {conf}%\nUTC {datetime.utcnow().strftime('%H:%M')}"
+    return txt,conf
 
 @app.route("/")
 def home():
- return "V3.4 Clean + Confirm"
+    return "V3.4.1 Clean+Confirm Fixed"
 
 @app.route(f"/{TOKEN}",methods=["POST"])
 def wh():
- s=request.get_data().decode("utf-8")
- up=telebot.types.Update.de_json(s)
- bot.process_new_updates([up])
- return ""
+    s=request.get_data().decode("utf-8")
+    up=telebot.types.Update.de_json(s)
+    bot.process_new_updates([up])
+    return ""
 
 @app.route("/pocket_postback")
 def pp():
- sec=request.args.get("secret")
- if sec!=SECRET:
-  return "Blocked",403
- sub=request.args.get("subid")
- if not sub: sub=request.args.get("click_id")
- sm=request.args.get("sum","0")
- try:
-  amt=float(sm)
-  gid=str(int(float(sub)))
- except:
-  return "invalid",400
- u=db.get(gid)
- if not u:
-  u={"total":0,"level":"none","verified":False,"refs":0,"today":0,"date":str(date.today()),"streak":0,"banned":False}
- tot=u.get("total",0)+amt
- lvl="none"
- if tot>=100: lvl="vip"
- elif tot>=50: lvl="pro"
- elif tot>=20: lvl="starter"
- u["total"]=tot
- u["level"]=lvl
- old_verified = u.get("verified", False) # not needed but
- if tot>=20: u["verified"]=True
- else: u["verified"]=False
- db[gid]=u
- save(db)
- # === V3.4 CONFIRMATION WITH CLEAN ===
- try:
-  chat_id = int(gid)
-  clean_chat(chat_id) # delete last bot message for clean chat
-  if lvl!="none":
-      if lvl=="vip": limit_txt="♾️ Unlimited"
-      elif lvl=="pro": limit_txt="100/day"
-      else: limit_txt="20/day"
-      k=types.InlineKeyboardMarkup()
-      k.add(types.InlineKeyboardButton("🚀 START TRADING NOW",callback_data="go"))
-      send_clean(chat_id, f"🎉 DEPOSIT CONFIRMED! ${amt}\n\n✅ Level Unlocked: {lvl.upper()} {limit_txt}\n💰 Total: ${tot}\n\nSend /start or click below to get signals!", reply_markup=k)
-  else:
-      send_clean(chat_id, f"💰 Deposit ${amt} added! Total ${tot}\nNeed $20 to unlock STARTER\n{LINK}?click_id={gid}")
- except Exception as e:
-  print(f"notify fail {gid}: {e}")
- return "ok",200
+    sec=request.args.get("secret")
+    if sec!=SECRET:
+        return "Blocked",403
+    sub=request.args.get("subid")
+    if not sub:
+        sub=request.args.get("click_id")
+    sm=request.args.get("sum","0")
+    try:
+        amt=float(sm)
+        gid=str(int(float(sub)))
+    except:
+        return "invalid",400
+    u=db.get(gid)
+    if not u:
+        u={"total":0,"level":"none","verified":False,"refs":0,"today":0,"date":str(date.today()),"streak":0,"banned":False}
+    tot=u.get("total",0)+amt
+    lvl="none"
+    if tot>=100:
+        lvl="vip"
+    elif tot>=50:
+        lvl="pro"
+    elif tot>=20:
+        lvl="starter"
+    u["total"]=tot
+    u["level"]=lvl
+    if tot>=20:
+        u["verified"]=True
+    else:
+        u["verified"]=False
+    db[gid]=u
+    save(db)
+    try:
+        chat_id = int(gid)
+        clean_chat(chat_id)
+        if lvl!="none":
+            if lvl=="vip":
+                limit_txt="♾️ Unlimited"
+            elif lvl=="pro":
+                limit_txt="100/day"
+            else:
+                limit_txt="20/day"
+            k=types.InlineKeyboardMarkup()
+            k.add(types.InlineKeyboardButton("🚀 START TRADING NOW",callback_data="go"))
+            send_clean(chat_id, f"🎉 DEPOSIT CONFIRMED! ${amt}\n\n✅ Level Unlocked: {lvl.upper()} {limit_txt}\n💰 Total: ${tot}\n\nClick below!", reply_markup=k)
+        else:
+            send_clean(chat_id, f"💰 Deposit ${amt} added! Total ${tot}\nNeed $20 to unlock")
+    except Exception as e:
+        print(f"notify fail {gid}: {e}")
+    return "ok",200
 
 def kb_start(tid):
- k=types.InlineKeyboardMarkup(row_width=2)
- k.add(types.InlineKeyboardButton("🚀 START TRADING",callback_data="go"))
- k.add(types.InlineKeyboardButton("💰 Deposit",callback_data="dep"),types.InlineKeyboardButton("📊 My Status",callback_data="bal"))
- k.add(types.InlineKeyboardButton("📈 Win Rate",callback_data="win"),types.InlineKeyboardButton("🎓 How to Use",callback_data="how"))
- k.add(types.InlineKeyboardButton("👥 Referral",callback_data="ref"),types.InlineKeyboardButton("💬 Support",callback_data="sup"))
- k.add(types.InlineKeyboardButton("📝 Register",url=f"{LINK}?click_id={tid}"))
- return k
-
-def kb_admin():
- k=types.InlineKeyboardMarkup(row_width=2)
- k.add(types.InlineKeyboardButton("➕ Add VIP",callback_data="adm_addvip"),types.InlineKeyboardButton("➖ Remove VIP",callback_data="adm_remvip"))
- k.add(types.InlineKeyboardButton("🚫 Ban/Unban",callback_data="adm_ban"),types.InlineKeyboardButton("📊 Stats",callback_data="adm_stats"))
- k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="adm_broad"),types.InlineKeyboardButton("📈 Win Rate",callback_data="adm_win"))
- return k
-
-@bot.message_handler(commands=["start"])
-def st(m):
- tid=str(m.from_user.id)
- clean_chat(m.chat.id, m.message_id)
- args=m.text.split()
- inv=None
- if len(args)>1: inv=args[1].replace("ref_","")
- if tid not in db:
-  db[tid]={"total":0,"level":"none","verified":False,"refs":0,"today":0,"date":str(date.today()),"streak":0,"banned":False,"inv":inv}
-  if inv and inv in db and inv!=tid:
-   db[inv]["refs"]=db[inv].get("refs",0)+1
-  save(db)
- u=ensure(tid)
- if tid==OWNER: lv="VIP OWNER ♾️"; lim_txt="♾️"
- else:
-  if not u.get("verified"): lv="FREE"; lim_txt="5"
-  else:
-   lv=u.get("level","none").upper()
-   lim_txt="20"
-   if lv=="PRO": lim_txt="100"
-   if lv=="VIP": lim_txt="♾️"
- used=u.get("today",0)
- msg=f"👋 WELCOME V3.4\nFREE 0$=5/day\n20$=20/day\n50$=100/day\n100$=Unlimited\nLevel {lv}\nUsed {used}/{lim_txt}\nReal 12 OTC 20\nID {tid}\n{LINK}?click_id={tid}"
- if tid==OWNER: msg=f"👑 OWNER VIP\n{msg}\n/admin for panel"
- send_clean(m.chat.id,msg,reply_markup=kb_start(tid))
-
-@bot.message_handler(commands=["admin"])
-def ad(m):
- tid=str(m.from_user.id)
- if tid!=OWNER:
-  clean_chat(m.chat.id, m.message_id)
-  send_clean(m.chat.id,"Owner only")
-  return
- clean_chat(m.chat.id, m.message_id)
- tot=len(db); vip=len([x for x in db.values() if x.get("level")=="vip"]); pro=len([x for
+    k=types.InlineKeyboardMarkup(row_width=2)
+    k.add(types.InlineKeyboardButton("🚀 START TRADING",callback_data="go"))
+    k.add(types.InlineKeyboardButton("💰 Deposit",callback_data="dep"),types.InlineKeyboardButton("📊 My Status",callback_data="bal"))
+    k.add(types.InlineKeyboardButton("📈 Win Rate",callback_data="win"),types.InlineKeyboardButton("🎓 How to Use",callback_data="how"))
+    k.add(types.InlineKeyboardButton("
