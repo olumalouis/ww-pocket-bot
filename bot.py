@@ -49,6 +49,10 @@ def ensure(tid):
   u["verified"]=False
  if "refs" not in u:
   u["refs"]=0
+ if str(tid)==OWNER:
+  u["level"]="vip"
+  u["verified"]=True
+  u["banned"]=False
  if u.get("date")!=str(date.today()):
   u["today"]=0
   u["date"]=str(date.today())
@@ -102,12 +106,12 @@ def gen(pair,exp,lvl):
  act=random.choice(["BUY UP","SELL DOWN"])
  conf=random.randint(cmin,cmax)
  mt="OTC" if "OTC" in pair else "REAL"
- txt=f"🎯 {lvl.upper()} SIGNAL\nPair {pair}\nMarket {mt}\nExpiry {exp}\nAction {act}\nConf {conf}%\nWin {conf}%\nUTC {datetime.utcnow().strftime('%H:%M')}"
+ txt=f"🎯 {lvl.upper()} SIGNAL\nPair {pair}\nMarket {mt}\nExpiry {exp}\nAction {act}\nConf {conf}%\nUTC {datetime.utcnow().strftime('%H:%M')}"
  return txt,conf
 
 @app.route("/")
 def home():
- return "V3 Full 32"
+ return "V3.2 Admin Buttons"
 
 @app.route(f"/{TOKEN}",methods=["POST"])
 def wh():
@@ -134,20 +138,21 @@ def pp():
  if not u:
   u={"total":0,"level":"none","verified":False,"refs":0,"today":0,"date":str(date.today()),"streak":0,"banned":False}
  tot=u.get("total",0)+amt
- lvl="starter"
+ lvl="none"
  if tot>=100:
   lvl="vip"
  elif tot>=50:
   lvl="pro"
+ elif tot>=20:
+  lvl="starter"
  u["total"]=tot
  u["level"]=lvl
- u["verified"]=True
+ if tot>=20:
+  u["verified"]=True
+ else:
+  u["verified"]=False
  db[gid]=u
  save(db)
- try:
-  bot.send_message(int(gid),f"✅ Deposit ${amt} Total ${tot} Level {lvl.upper()} Limit checked /balance")
- except:
-  pass
  return "ok",200
 
 def kb_start(tid):
@@ -157,6 +162,13 @@ def kb_start(tid):
  k.add(types.InlineKeyboardButton("📈 Win Rate",callback_data="win"),types.InlineKeyboardButton("🎓 How to Use",callback_data="how"))
  k.add(types.InlineKeyboardButton("👥 Referral",callback_data="ref"),types.InlineKeyboardButton("💬 Support",callback_data="sup"))
  k.add(types.InlineKeyboardButton("📝 Register",url=f"{LINK}?click_id={tid}"))
+ return k
+
+def kb_admin():
+ k=types.InlineKeyboardMarkup(row_width=2)
+ k.add(types.InlineKeyboardButton("➕ Add VIP",callback_data="adm_addvip"),types.InlineKeyboardButton("➖ Remove VIP",callback_data="adm_remvip"))
+ k.add(types.InlineKeyboardButton("🚫 Ban/Unban",callback_data="adm_ban"),types.InlineKeyboardButton("📊 Stats",callback_data="adm_stats"))
+ k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="adm_broad"),types.InlineKeyboardButton("📈 Win Rate",callback_data="adm_win"))
  return k
 
 @bot.message_handler(commands=["start"])
@@ -171,23 +183,25 @@ def st(m):
   if inv and inv in db and inv!=tid:
    db[inv]["refs"]=db[inv].get("refs",0)+1
   save(db)
- else:
-  ensure(tid)
- u=db[tid]
- lv=u.get("level","none").upper()
- if not u.get("verified") and tid!=OWNER:
-  lv="FREE"
- used=u.get("today",0)
- lim_txt="5"
- if lv=="STARTER":
-  lim_txt="20"
- if lv=="PRO":
-  lim_txt="100"
- if lv=="VIP" or tid==OWNER:
-  lim_txt="♾️"
- msg=f"👋 WELCOME V3 32 PAIRS\nFREE 5 $20=20 $50=100 $100=♾️\nLevel {lv} Used {used}/{lim_txt}\nReal 12 OTC 20\nID {tid}\n{LINK}?click_id={tid}"
+ u=ensure(tid)
  if tid==OWNER:
-  msg=f"👑 OWNER VIP\n{msg}\n/admin"
+  lv="VIP OWNER ♾️"
+  lim_txt="♾️"
+ else:
+  if not u.get("verified"):
+   lv="FREE"
+   lim_txt="5"
+  else:
+   lv=u.get("level","none").upper()
+   lim_txt="20"
+   if lv=="PRO":
+    lim_txt="100"
+   if lv=="VIP":
+    lim_txt="♾️"
+ used=u.get("today",0)
+ msg=f"👋 WELCOME V3.2\nFREE 0$=5/day\n20$=20/day\n50$=100/day\n100$=Unlimited\nLevel {lv}\nUsed {used}/{lim_txt}\nReal 12 OTC 20\nID {tid}\n{LINK}?click_id={tid}"
+ if tid==OWNER:
+  msg=f"👑 OWNER VIP\n{msg}\n/admin for panel"
  bot.send_message(m.chat.id,msg,reply_markup=kb_start(tid))
 
 @bot.message_handler(commands=["admin"])
@@ -199,17 +213,14 @@ def ad(m):
  tot=len(db)
  vip=len([x for x in db.values() if x.get("level")=="vip"])
  pro=len([x for x in db.values() if x.get("level")=="pro"])
- st=len([x for x in db.values() if x.get("level")=="starter"])
- free=tot-vip-pro-st
+ starter=len([x for x in db.values() if x.get("level")=="starter"])
+ free=tot-vip-pro-starter
  dep=sum([x.get("total",0) for x in db.values()])
  today=sum([x.get("today",0) for x in db.values() if x.get("date")==str(date.today())])
- k=types.InlineKeyboardMarkup(row_width=2)
- k.add(types.InlineKeyboardButton("Add VIP",callback_data="av"),types.InlineKeyboardButton("Rem VIP",callback_data="rv"))
- k.add(types.InlineKeyboardButton("Ban",callback_data="ban"),types.InlineKeyboardButton("Stats",callback_data="stats"))
- msg=f"ADMIN V3\nUsers {tot}\nVIP {vip} PRO {pro} STARTER {st} FREE {free}\nDeposits ${dep}\nSignals Today {today}\nPairs 32"
- bot.send_message(m.chat.id,msg,reply_markup=k)
+ msg=f"👑 ADMIN PANEL V3.2\nUsers {tot}\nVIP {vip} PRO {pro} STARTER {starter} FREE {free}\nDeposits ${dep}\nSignals Today {today}\nPairs 32\n\nButtons below:"
+ bot.send_message(m.chat.id,msg,reply_markup=kb_admin())
 
-@bot.message_handler(commands=["balance","winrate","addvip","remvip","ban"])
+@bot.message_handler(commands=["balance","winrate","addvip","remvip","ban","broadcast"])
 def cmds(m):
  tid=str(m.from_user.id)
  txt=m.text
@@ -221,45 +232,53 @@ def cmds(m):
   bot.send_message(m.chat.id,f"Status {used}/{lim} Total ${u.get('total',0)} Level {u.get('level')} Streak {u.get('streak')} Ref {u.get('refs')}")
   return
  if txt.startswith("/winrate"):
-  bot.send_message(m.chat.id,"Win Rate 32 pairs\nEUR/USD OTC 88%\nGBP/USD OTC 86%\nBTC OTC 84%\nSTARTER 75-82 PRO 82-89 VIP 89-95")
+  bot.send_message(m.chat.id,"Win Rate 32\nEUR/USD OTC 88% GBP/USD OTC 86% BTC 84%\nSTARTER 75-82 PRO 82-89 VIP 89-95")
   return
  if txt.startswith("/addvip") and tid==OWNER:
-  try:
-   p=txt.split()
-   t=p[1]
-   u=db.get(t,{"total":100,"level":"vip","verified":True,"refs":0,"today":0,"date":str(date.today()),"streak":0,"banned":False})
-   u["total"]=100
-   u["level"]="vip"
-   u["verified"]=True
-   u["banned"]=False
-   db[t]=u
-   save(db)
-   bot.send_message(m.chat.id,f"VIP added {t}")
-  except:
+  p=txt.split()
+  if len(p)<2:
    bot.send_message(m.chat.id,"Use /addvip ID")
+   return
+  t=p[1]
+  u=db.get(t,{"total":100,"level":"vip","verified":True,"refs":0,"today":0,"date":str(date.today()),"streak":0,"banned":False})
+  u["total"]=100
+  u["level"]="vip"
+  u["verified"]=True
+  u["banned"]=False
+  db[t]=u
+  save(db)
+  bot.send_message(m.chat.id,f"✅ VIP added {t} ♾️")
   return
  if txt.startswith("/remvip") and tid==OWNER:
-  try:
-   p=txt.split()
-   t=p[1]
-   if t in db:
-    db[t]["level"]="none"
-    db[t]["verified"]=False
-    save(db)
-    bot.send_message(m.chat.id,f"Removed {t}")
-  except:
-   bot.send_message(m.chat.id,"Use /remvip ID")
+  p=txt.split()
+  t=p[1]
+  if t in db:
+   db[t]["level"]="none"
+   db[t]["verified"]=False
+   save(db)
+   bot.send_message(m.chat.id,f"✅ Removed {t}")
   return
  if txt.startswith("/ban") and tid==OWNER:
-  try:
-   p=txt.split()
-   t=p[1]
-   if t in db:
-    db[t]["banned"]=not db[t].get("banned",False)
-    save(db)
-    bot.send_message(m.chat.id,f"Ban {t} {db[t]['banned']}")
-  except:
-   bot.send_message(m.chat.id,"Use /ban ID")
+  p=txt.split()
+  t=p[1]
+  if t in db:
+   db[t]["banned"]=not db[t].get("banned",False)
+   save(db)
+   bot.send_message(m.chat.id,f"Ban {t} {db[t]['banned']}")
+  return
+ if txt.startswith("/broadcast") and tid==OWNER:
+  msg=txt.replace("/broadcast","").strip()
+  if not msg:
+   bot.send_message(m.chat.id,"Use /broadcast your message")
+   return
+  cnt=0
+  for uid in list(db.keys()):
+   try:
+    bot.send_message(int(uid),f"📢 BROADCAST\n{msg}")
+    cnt+=1
+   except:
+    pass
+  bot.send_message(m.chat.id,f"Broadcast sent to {cnt} users")
   return
 
 @bot.callback_query_handler(func=lambda c: True)
@@ -269,17 +288,16 @@ def cb(c):
  lvl=get_lvl(tid)
  if d=="go":
   if not lvl:
-   # FREEMIUM LOCK 40% chance
    if random.random()<0.4:
     rc=random.randint(84,92)
     pr=random.choice(OTC[:5])
     k=types.InlineKeyboardMarkup()
     k.add(types.InlineKeyboardButton("Unlock $20",url=f"{LINK}?click_id={tid}"))
-    bot.send_message(c.message.chat.id,f"🔒 VIP {rc}% LOCKED\nPair {pr}\nReal {rc}% You see 65% blurred\n$20=20 $50=100 $100=♾️\n{LINK}?click_id={tid}",reply_markup=k)
+    bot.send_message(c.message.chat.id,f"🔒 VIP {rc}% LOCKED Pair {pr} Real {rc}% You see 65% blurred $20=20 $50=100 $100=♾️ {LINK}?click_id={tid}",reply_markup=k)
     inc(tid)
     bot.answer_callback_query(c.id)
     return
-   bot.send_message(c.message.chat.id,f"FREE teaser 5/day Deposit $20 for 20/day {LINK}?click_id={tid}")
+   bot.send_message(c.message.chat.id,f"FREE 5/day Deposit $20 for 20/day {LINK}?click_id={tid}")
    inc(tid)
    bot.answer_callback_query(c.id)
    return
@@ -288,12 +306,11 @@ def cb(c):
    bot.send_message(c.message.chat.id,f"Limit {used}/{lim} Upgrade {LINK}?click_id={tid}")
    bot.answer_callback_query(c.id)
    return
-  # WARNING ONLY after 4
   u=ensure(tid)
   if u.get("streak",0)>=4:
    k=types.InlineKeyboardMarkup(row_width=2)
    k.add(types.InlineKeyboardButton("Continue",callback_data="go"),types.InlineKeyboardButton("Break",callback_data="bal"))
-   bot.send_message(c.message.chat.id,f"⚠️ WARNING {u.get('streak')} loss streak Can continue Warning only",reply_markup=k)
+   bot.send_message(c.message.chat.id,f"⚠️ WARNING {u.get('streak')} loss streak Can continue",reply_markup=k)
   k=types.InlineKeyboardMarkup(row_width=2)
   k.add(types.InlineKeyboardButton("Real 12",callback_data="real_man"),types.InlineKeyboardButton("OTC 20",callback_data="otc_man"))
   k.add(types.InlineKeyboardButton("Auto Best 3",callback_data="real_auto"))
@@ -303,19 +320,37 @@ def cb(c):
   _,used,lim=check(tid,u.get("level","free"))
   if tid==OWNER:
    lim="♾️"
-  bot.send_message(c.message.chat.id,f"Status {used}/{lim} Total ${u.get('total',0)}")
+  bot.send_message(c.message.chat.id,f"Status {used}/{lim} Total ${u.get('total',0)} Level {u.get('level')}")
  elif d=="win":
-  bot.send_message(c.message.chat.id,"Win Rate 32\nEUR/USD OTC 88% GBP/USD OTC 86% BTC 84%\nSTARTER 75-82 PRO 82-89 VIP 89-95")
+  bot.send_message(c.message.chat.id,"Win Rate 32 EUR/USD OTC 88% GBP/USD OTC 86% BTC 84% STARTER 75-82 PRO 82-89 VIP 89-95")
  elif d=="dep":
-  bot.send_message(c.message.chat.id,f"Deposit Click {LINK}?click_id={tid} $20=20 $50=100 $100=♾️ Auto verified")
+  bot.send_message(c.message.chat.id,f"Deposit {LINK}?click_id={tid} FREE 0$=5 20$=20 50$=100 100$=♾️")
  elif d=="how":
-  bot.send_message(c.message.chat.id,f"How to Use Register {LINK}?click_id={tid} Deposit $20 START TRADING Manual Auto Real OTC")
+  bot.send_message(c.message.chat.id,f"How to Use Register {LINK}?click_id={tid} Deposit $20 START TRADING")
  elif d=="ref":
   bot.send_message(c.message.chat.id,f"Ref https://t.me/WWPocketSignalsbot?start=ref_{tid} Invited {db.get(tid,{}).get('refs',0)}")
  elif d=="sup":
   bot.send_message(c.message.chat.id,f"Support ID {tid}")
- elif d=="av" or d=="rv" or d=="ban":
-  bot.send_message(c.message.chat.id,"Use /addvip ID /remvip ID /ban ID")
+ elif d.startswith("adm_"):
+  if tid!=OWNER:
+   bot.answer_callback_query(c.id,"Owner only")
+   return
+  if d=="adm_addvip":
+   bot.send_message(c.message.chat.id,"➕ Add VIP\nUse command:\n/addvip 123456789\nReplace ID with user ID")
+  elif d=="adm_remvip":
+   bot.send_message(c.message.chat.id,"➖ Remove VIP\nUse:\n/remvip 123456789")
+  elif d=="adm_ban":
+   bot.send_message(c.message.chat.id,"🚫 Ban/Unban\nUse:\n/ban 123456789\nToggle ban")
+  elif d=="adm_stats":
+   tot=len(db)
+   vip=len([x for x in db.values() if x.get("level")=="vip"])
+   pro=len([x for x in db.values() if x.get("level")=="pro"])
+   dep=sum([x.get("total",0) for x in db.values()])
+   bot.send_message(c.message.chat.id,f"📊 STATS\nUsers {tot}\nVIP {vip} PRO {pro}\nDeposits ${dep}")
+  elif d=="adm_broad":
+   bot.send_message(c.message.chat.id,"📢 Broadcast\nUse:\n/broadcast Your message here\nWill send to all users")
+  elif d=="adm_win":
+   bot.send_message(c.message.chat.id,"📈 Win Rate 32 pairs active STARTER 75-82 PRO 82-89 VIP 89-95")
  elif d.startswith("real_") or d.startswith("otc_"):
   parts=d.split("_")
   mtype=parts[0]
@@ -325,7 +360,6 @@ def cb(c):
   if is_otc:
    tier_pairs=OTC
   if mode=="auto":
-   # AUTO BEST 3
    msg="AUTO BEST 3\n\n"
    for p in tier_pairs[:3]:
     ex="1m"
@@ -384,7 +418,7 @@ def cb(c):
   if u.get("streak",0)>=4:
    k=types.InlineKeyboardMarkup(row_width=2)
    k.add(types.InlineKeyboardButton("Continue",callback_data="go"),types.InlineKeyboardButton("Break",callback_data="bal"))
-   bot.send_message(c.message.chat.id,f"⚠️ WARNING {u.get('streak')} loss streak Can continue Warning only",reply_markup=k)
+   bot.send_message(c.message.chat.id,f"⚠️ WARNING {u.get('streak')} streak Can continue Warning only",reply_markup=k)
  bot.answer_callback_query(c.id)
 
 if __name__=="__main__":
@@ -399,7 +433,7 @@ if __name__=="__main__":
    URL="https://"+URL
   full=f"{URL}/{TOKEN}"
   bot.set_webhook(url=full)
-  print(f"Webhook {full} Full V3")
+  print(f"Webhook {full} V3.2 Admin Buttons")
  else:
   bot.infinity_polling()
  app.run(host="0.0.0.0",port=int(os.getenv("PORT",5000)))
