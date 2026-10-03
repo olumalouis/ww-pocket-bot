@@ -13,8 +13,8 @@ OWNER = "8188622130"
 bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask(__name__)
 
-REAL = ["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/JPY","EUR/GBP","NZD/USD"]
-OTC = ["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","AUD/USD OTC","EUR/JPY OTC","GBP/JPY OTC","BTC/USD OTC","USD/BRL OTC","USD/INR OTC","USD/EGP OTC","USD/PKR OTC","USD/ARS OTC","USD/BDT OTC","USD/TRY OTC"]
+REAL = ["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD"]
+OTC = ["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","AUD/USD OTC","BTC/USD OTC","USD/BRL OTC","USD/INR OTC","USD/EGP OTC"]
 EXP = ["M1","M2","M3","M5"]
 
 last_bot_msg = {}
@@ -80,7 +80,7 @@ def inc(tid):
     if u: u["today"]=u.get("today",0)+1; db[str(tid)]=u; save(db)
 
 @app.route("/")
-def home(): return "V3.5 OK - Admin Fixed", 200
+def home(): return "V3.5 OK Fixed2", 200
 
 @app.route("/pocket_postback")
 def pp():
@@ -106,7 +106,8 @@ def pp():
         chat_id=int(gid)
         k=types.InlineKeyboardMarkup()
         k.add(types.InlineKeyboardButton("START TRADING NOW",callback_data="go"))
-        send_clean(chat_id, f"DEPOSIT ${amt} CONFIRMED Level: {lvl.upper()} Total ${tot}", reply_markup=k)
+        txt2 = "DEPOSIT " + str(amt) + " CONFIRMED Level: " + lvl.upper() + " Total " + str(tot)
+        send_clean(chat_id, txt2, reply_markup=k)
     except: pass
     return "ok",200
 
@@ -132,10 +133,11 @@ def start(m):
     k=types.InlineKeyboardMarkup(row_width=2)
     k.add(types.InlineKeyboardButton("GET SIGNAL",callback_data="go"))
     k.add(types.InlineKeyboardButton("Deposit",callback_data="dep"),types.InlineKeyboardButton("My Status",callback_data="bal"))
-    k.add(types.InlineKeyboardButton("Register",url=f"{LINK}?click_id={tid}"))
+    k.add(types.InlineKeyboardButton("Register",url=LINK + "?click_id=" + tid))
     if tid==OWNER:
         k.add(types.InlineKeyboardButton("ADMIN PANEL",callback_data="admin"))
-    send_clean(m.chat.id, f"WELCOME V3.5 Level: {lvl} Link: {LINK}?click_id={tid}", reply_markup=k)
+    txt = "WELCOME V3.5 Level: " + str(lvl) + " Link: " + LINK + "?click_id=" + tid
+    send_clean(m.chat.id, txt, reply_markup=k)
 
 @bot.message_handler(commands=["admin","users","stats","panel"])
 def admin_cmd(m):
@@ -147,7 +149,7 @@ def admin_cmd(m):
     k.add(types.InlineKeyboardButton("Users List",callback_data="admin_users"),types.InlineKeyboardButton("Stats",callback_data="admin_stats"))
     k.add(types.InlineKeyboardButton("Broadcast",callback_data="admin_bc"),types.InlineKeyboardButton("Ban Menu",callback_data="admin_ban"))
     k.add(types.InlineKeyboardButton("Deposits",callback_data="admin_deps"),types.InlineKeyboardButton("Reset Daily",callback_data="admin_reset"))
-    txt=f"ADMIN PANEL V3.5 Users: {total_users} Verified: {verified}"
+    txt="ADMIN PANEL V3.5 Users: " + str(total_users) + " Verified: " + str(verified)
     send_clean(m.chat.id, txt, reply_markup=k)
 
 @bot.callback_query_handler(func=lambda c: True)
@@ -163,21 +165,10 @@ def cb(c):
             k.add(types.InlineKeyboardButton("Users List",callback_data="admin_users"),types.InlineKeyboardButton("Stats",callback_data="admin_stats"))
             k.add(types.InlineKeyboardButton("Broadcast",callback_data="admin_bc"),types.InlineKeyboardButton("Ban Menu",callback_data="admin_ban"))
             k.add(types.InlineKeyboardButton("Deposits",callback_data="admin_deps"),types.InlineKeyboardButton("Reset Daily",callback_data="admin_reset"))
-            send_clean(c.message.chat.id, f"ADMIN Users: {total_users} Verified: {verified}", reply_markup=k)
+            txt="ADMIN Users: " + str(total_users) + " Verified: " + str(verified)
+            send_clean(c.message.chat.id, txt, reply_markup=k)
             return
         if d=="admin_users":
             txt="USERS PANEL\n\n"
             for uid,u in list(db.items())[:20]:
-                txt+=f"{uid} | {u.get('level')} | ${u.get('total')} | {u.get('today')}today\n"
-            k=types.InlineKeyboardMarkup(); k.add(types.InlineKeyboardButton("Back",callback_data="admin"))
-            send_clean(c.message.chat.id, txt, reply_markup=k)
-            return
-        if d=="admin_stats":
-            txt=f"STATS Total: {len(db)} Verified: {sum(1 for u in db.values() if u.get('verified'))}"
-            k=types.InlineKeyboardMarkup(); k.add(types.InlineKeyboardButton("Back",callback_data="admin"))
-            send_clean(c.message.chat.id, txt, reply_markup=k)
-            return
-        if d=="admin_deps":
-            txt="DEPOSITS\n"
-            for uid,u in sorted(db.items(), key=lambda x: x[1].get("total",0), reverse=True)[:15]:
-                txt+=f"{uid}: ${u
+                line = str(uid) + " | " + str
