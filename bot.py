@@ -36,7 +36,7 @@ def send_clean(chat_id, text, reply_markup=None):
         last_bot_msg[chat_id] = msg.message_id
         return msg
     except Exception as e:
-        print(f"send_clean fail {e}")
+        print("send_clean fail")
 
 def load():
     if os.path.exists(FILE):
@@ -119,14 +119,14 @@ def gen(pair,exp,lvl):
     act=random.choice(["BUY UP","SELL DOWN"])
     conf=random.randint(cmin,cmax)
     mt="OTC" if "OTC" in pair else "REAL"
-    txt=f"🎯 {lvl.upper()} SIGNAL\nPair {pair}\nMarket {mt}\nExpiry {exp}\nAction {act}\nConf {conf}%\nUTC {datetime.utcnow().strftime('%H:%M')}"
+    txt="SIGNAL "+lvl.upper()+"\nPair "+pair+"\nMarket "+mt+"\nExpiry "+exp+"\nAction "+act+"\nConf "+str(conf)+"%\nUTC "+datetime.utcnow().strftime('%H:%M')
     return txt,conf
 
 @app.route("/")
 def home():
-    return "V3.4.1 Clean+Confirm Fixed"
+    return "V3.4.2 Fixed"
 
-@app.route(f"/{TOKEN}",methods=["POST"])
+@app.route("/"+TOKEN,methods=["POST"])
 def wh():
     s=request.get_data().decode("utf-8")
     up=telebot.types.Update.de_json(s)
@@ -152,42 +152,96 @@ def pp():
         u={"total":0,"level":"none","verified":False,"refs":0,"today":0,"date":str(date.today()),"streak":0,"banned":False}
     tot=u.get("total",0)+amt
     lvl="none"
-    if tot>=100:
-        lvl="vip"
-    elif tot>=50:
-        lvl="pro"
-    elif tot>=20:
-        lvl="starter"
+    if tot>=100: lvl="vip"
+    elif tot>=50: lvl="pro"
+    elif tot>=20: lvl="starter"
     u["total"]=tot
     u["level"]=lvl
-    if tot>=20:
-        u["verified"]=True
-    else:
-        u["verified"]=False
+    if tot>=20: u["verified"]=True
+    else: u["verified"]=False
     db[gid]=u
     save(db)
     try:
-        chat_id = int(gid)
+        chat_id=int(gid)
         clean_chat(chat_id)
         if lvl!="none":
-            if lvl=="vip":
-                limit_txt="♾️ Unlimited"
-            elif lvl=="pro":
-                limit_txt="100/day"
-            else:
-                limit_txt="20/day"
             k=types.InlineKeyboardMarkup()
-            k.add(types.InlineKeyboardButton("🚀 START TRADING NOW",callback_data="go"))
-            send_clean(chat_id, f"🎉 DEPOSIT CONFIRMED! ${amt}\n\n✅ Level Unlocked: {lvl.upper()} {limit_txt}\n💰 Total: ${tot}\n\nClick below!", reply_markup=k)
+            k.add(types.InlineKeyboardButton("START TRADING NOW",callback_data="go"))
+            send_clean(chat_id, "DEPOSIT CONFIRMED $"+str(amt)+"\nUnlocked: "+lvl.upper()+"\nTotal: $"+str(tot), reply_markup=k)
         else:
-            send_clean(chat_id, f"💰 Deposit ${amt} added! Total ${tot}\nNeed $20 to unlock")
+            send_clean(chat_id, "Deposit $"+str(amt)+" added Total $"+str(tot))
     except Exception as e:
-        print(f"notify fail {gid}: {e}")
+        print("notify fail")
     return "ok",200
 
 def kb_start(tid):
     k=types.InlineKeyboardMarkup(row_width=2)
-    k.add(types.InlineKeyboardButton("🚀 START TRADING",callback_data="go"))
-    k.add(types.InlineKeyboardButton("💰 Deposit",callback_data="dep"),types.InlineKeyboardButton("📊 My Status",callback_data="bal"))
-    k.add(types.InlineKeyboardButton("📈 Win Rate",callback_data="win"),types.InlineKeyboardButton("🎓 How to Use",callback_data="how"))
-    k.add(types.InlineKeyboardButton("
+    k.add(types.InlineKeyboardButton("START TRADING",callback_data="go"))
+    k.add(types.InlineKeyboardButton("Deposit",callback_data="dep"),types.InlineKeyboardButton("My Status",callback_data="bal"))
+    k.add(types.InlineKeyboardButton("Win Rate",callback_data="win"),types.InlineKeyboardButton("How to Use",callback_data="how"))
+    k.add(types.InlineKeyboardButton("Referral",callback_data="ref"),types.InlineKeyboardButton("Support",callback_data="sup"))
+    k.add(types.InlineKeyboardButton("Register",url=LINK+"?click_id="+tid))
+    return k
+
+def kb_admin():
+    k=types.InlineKeyboardMarkup(row_width=2)
+    k.add(types.InlineKeyboardButton("Add VIP",callback_data="adm_addvip"),types.InlineKeyboardButton("Remove VIP",callback_data="adm_remvip"))
+    k.add(types.InlineKeyboardButton("Ban/Unban",callback_data="adm_ban"),types.InlineKeyboardButton("Stats",callback_data="adm_stats"))
+    k.add(types.InlineKeyboardButton("Broadcast",callback_data="adm_broad"),types.InlineKeyboardButton("Win Rate",callback_data="adm_win"))
+    return k
+
+@bot.message_handler(commands=["start"])
+def st(m):
+    tid=str(m.from_user.id)
+    clean_chat(m.chat.id, m.message_id)
+    args=m.text.split()
+    inv=None
+    if len(args)>1:
+        inv=args[1].replace("ref_","")
+    if tid not in db:
+        db[tid]={"total":0,"level":"none","verified":False,"refs":0,"today":0,"date":str(date.today()),"streak":0,"banned":False,"inv":inv}
+        if inv and inv in db and inv!=tid:
+            db[inv]["refs"]=db[inv].get("refs",0)+1
+        save(db)
+    u=ensure(tid)
+    if tid==OWNER:
+        lv="VIP OWNER UNLIMITED"
+        lim_txt="UNLIMITED"
+    else:
+        if not u.get("verified"):
+            lv="FREE"
+            lim_txt="5"
+        else:
+            lv=u.get("level","none").upper()
+            lim_txt="20"
+            if lv=="PRO": lim_txt="100"
+            if lv=="VIP": lim_txt="UNLIMITED"
+    used=u.get("today",0)
+    msg="WELCOME V3.4\nFREE 0=5/day\n20=20/day\n50=100/day\n100=Unlimited\nLevel "+lv+"\nUsed "+str(used)+"/"+lim_txt+"\nReal 12 OTC 20\nID "+tid+"\n"+LINK+"?click_id="+tid
+    if tid==OWNER:
+        msg="OWNER VIP\n"+msg+"\n/admin for panel"
+    send_clean(m.chat.id,msg,reply_markup=kb_start(tid))
+
+@bot.message_handler(commands=["admin"])
+def ad(m):
+    tid=str(m.from_user.id)
+    if tid!=OWNER:
+        clean_chat(m.chat.id, m.message_id)
+        send_clean(m.chat.id,"Owner only")
+        return
+    clean_chat(m.chat.id, m.message_id)
+    tot=len(db)
+    vip_c=0
+    pro_c=0
+    starter_c=0
+    for x in db.values():
+        if x.get("level")=="vip": vip_c+=1
+        if x.get("level")=="pro": pro_c+=1
+        if x.get("level")=="starter": starter_c+=1
+    free_c=tot-vip_c-pro_c-starter_c
+    dep=sum([x.get("total",0) for x in db.values()])
+    today_c=0
+    for x in db.values():
+        if x.get("date")==str(date.today()):
+            today_c+=x.get("today",0)
+    msg="ADMIN PANEL V3.4\nUsers "+str(tot)+"\nVIP "+str(vip_c)+" PRO "+str(pro_c)+" STARTER "+str(starter_c)+" FREE "+str(free_c)+"\nDeposits $"+str
