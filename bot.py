@@ -171,4 +171,4 @@ def cb(c):
         if d=="admin_users":
             txt="USERS PANEL\n\n"
             for uid,u in list(db.items())[:20]:
-                line = str(uid) + " | " + str
+                line = str(uid) + " | " +
