@@ -1,4 +1,4 @@
-import os, json, random
+import os, json, random, time
 from datetime import date
 from flask import Flask, request
 import telebot
@@ -8,6 +8,9 @@ SECRET=os.getenv("POSTBACK_SECRET","WW12345")
 LINK="https://u3.shortink.io/smart/jnLBWcb8IEyL7T"
 FILE="users.json"
 OWNER="8188622130"
+# --- V4.5 SECURITY FILES ---
+SEC_FILE="security.json"
+BLOCK_FILE="blocked_ips.json"
 bot=telebot.TeleBot(TOKEN,threaded=False)
 app=Flask(__name__)
 REAL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/GBP","GBP/JPY","EUR/JPY","AUD/JPY","USD/CHF","EUR/AUD","GBP/AUD","EUR/CAD","NZD/USD","EUR/NZD"]
@@ -22,6 +25,24 @@ def load():
 def save(d):
  with open(FILE,"w") as f: json.dump(d,f,indent=2)
 db=load()
+def load_sec():
+ if os.path.exists(SEC_FILE):
+  try:
+   with open(SEC_FILE) as f: return json.load(f)
+  except: return []
+ return []
+def save_sec(d):
+ with open(SEC_FILE,"w") as f: json.dump(d[-200:],f,indent=2)
+def load_block():
+ if os.path.exists(BLOCK_FILE):
+  try:
+   with open(BLOCK_FILE) as f: return json.load(f)
+  except: return {}
+ return {}
+def save_block(d):
+ with open(BLOCK_FILE,"w") as f: json.dump(d,f,indent=2)
+sec_log=load_sec()
+blocked=load_block()
 def ensure(tid):
  tid=str(tid);u=db.get(tid)
  if not u: return None
@@ -48,16 +69,57 @@ def check_limit(tid,lvl):
 def inc(tid):
  u=ensure(tid)
  if u: u["today"]=u.get("today",0)+1;db[str(tid)]=u;save(db)
+def get_ip():
+ # Railway / Cloudflare
+ ip=request.headers.get('X-Forwarded-For','')
+ if ip: ip=ip.split(',')[0].strip()
+ else: ip=request.remote_addr or "unknown"
+ return ip
+
 @app.route("/")
-def home(): return "V4.4 CLEARME OK",200
+def home(): return "V4.5 SECURE OK",200
+
 @app.route("/pocket_postback")
 def pp():
+ global sec_log, blocked
+ ip=get_ip()
+ now=time.time()
+ # Clean old blocks (24h)
+ for b_ip, exp in list(blocked.items()):
+  if now > exp: del blocked[b_ip]
+ save_block(blocked)
+ if ip in blocked:
+  return "IP blocked 24h",403
+
  sec=request.args.get("secret")
- if sec!=SECRET: return "Blocked",403
+ # --- SECURITY: WRONG SECRET LOG + ALERT ---
+ if sec!=SECRET:
+  sec_log.append({"time":str(date.today()),"ip":ip,"secret_tried":sec,"status":"WRONG_SECRET"})
+  save_sec(sec_log)
+  # Count fails from this IP
+  fails=len([x for x in sec_log if x["ip"]==ip and x["status"]=="WRONG_SECRET" and time.time()-now<3600])
+  if fails>=5:
+   blocked[ip]=now+86400
+   save_block(blocked)
+  try:
+   bot.send_message(OWNER,f"🚨 FAKE ATTEMPT BLOCKED!\nIP: {ip}\nTried secret: {sec}\nFails from this IP: {fails}\nStatus: Blocked" + (" 24h" if ip in blocked else ""))
+  except: pass
+  return "Blocked",403
+
  sub=request.args.get("subid") or request.args.get("click_id")
  sm=request.args.get("sum","0")
  try: amt=float(sm);gid=str(int(float(sub)))
  except: return "invalid",400
+
+ # --- SECURITY: LOG ALL SUCCESS + RATE LIMIT ---
+ sec_log.append({"time":str(date.today()),"ip":ip,"gid":gid,"sum":amt,"status":"SUCCESS"})
+ save_sec(sec_log)
+ # Rate limit: same click_id 10 times in 1 hour = block
+ recent=[x for x in sec_log if x.get("gid")==gid and x["status"]=="SUCCESS" and time.time()-now<3600]
+ if len(recent)>10:
+  try: bot.send_message(OWNER,f"⚠️ Rate limit: {gid} tried {len(recent)} deposits in 1h from IP {ip}")
+  except: pass
+
  u=db.get(gid)
  if not u: u={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False}
  tot=u.get("total",0)+amt
@@ -71,10 +133,12 @@ def pp():
  try:
   if amt>=20:
    bot.send_message(gid, f"🎉 Deposit Confirmed!\n\n💰 Amount: ${amt}\n💵 Total: ${tot}\n⭐ Level: {lvl.upper()}\n\n✅ You are now UNLOCKED!\n{'20 signals/day' if lvl=='starter' else '100 signals/day' if lvl=='pro' else 'UNLIMITED signals'}\n\nSend /start to get signals!")
-  bot.send_message(OWNER, f"💰 NEW DEPOSIT!\nUser: {gid}\nAmount: ${amt}\nTotal: ${tot}\nLevel: {lvl}")
+  # Owner notify with IP info
+  bot.send_message(OWNER, f"💰 NEW DEPOSIT!\nUser: {gid}\nAmount: ${amt}\nTotal: ${tot}\nLevel: {lvl}\nIP: {ip}\n{'⚠️ Browser test (not Pocket server)' if 'Mozilla' in request.headers.get('User-Agent','') else '✅ Server postback'}")
  except Exception as e:
   print(f"Notify error: {e}")
  return "ok",200
+
 @app.route("/webhook",methods=["POST"])
 def webhook():
  js=request.get_data().decode('utf-8')
@@ -82,12 +146,10 @@ def webhook():
  bot.process_new_updates([up])
  return "ok",200
 
-# --- NEW COMMANDS: /clearme /resetme /clear ---
 @bot.message_handler(commands=["clearme","resetme","clear","reset"])
 def clear_cmd(m):
  tid=str(m.from_user.id)
  args=m.text.split()
- # /clear USER_ID for owner to clear others
  if len(args)>1 and tid==OWNER:
   target=args[1]
   if target in db:
@@ -99,7 +161,6 @@ def clear_cmd(m):
   else:
    bot.send_message(m.chat.id,f"User {target} not found")
   return
- # self clear
  if tid in db:
   is_owner = (tid==OWNER)
   db[tid]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False}
@@ -123,7 +184,7 @@ def start(m):
  k.add(types.InlineKeyboardButton("💰 Deposit",callback_data="dep"),types.InlineKeyboardButton("📈 My Status",callback_data="bal"))
  k.add(types.InlineKeyboardButton("🔗 Register",url=LINK+"?click_id="+tid),types.InlineKeyboardButton("📞 Support",callback_data="sup"))
  if tid==OWNER: k.add(types.InlineKeyboardButton("👑 ADMIN PANEL",callback_data="admin"))
- bot.send_message(m.chat.id,f"WELCOME V4.4\nLevel: {lvl}\nREAL: 15 | OTC: 30\n/clearme to reset test\nLink: {LINK}?click_id={tid}",reply_markup=k)
+ bot.send_message(m.chat.id,f"WELCOME V4.5 SECURE\nLevel: {lvl}\nREAL: 15 | OTC: 30\n/clearme to reset test\nLink: {LINK}?click_id={tid}",reply_markup=k)
 
 @bot.callback_query_handler(func=lambda c: True)
 def cb(c):
@@ -136,7 +197,8 @@ def cb(c):
   k.add(types.InlineKeyboardButton("👥 Users List",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
   k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban User",callback_data="ad_ban"))
   k.add(types.InlineKeyboardButton("💵 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset Daily",callback_data="ad_reset"))
-  bot.send_message(chat_id,f"👑 ADMIN PANEL - 6 Buttons\nUsers: {len(db)}\nSelect:",reply_markup=k);return
+  k.add(types.InlineKeyboardButton("🛡️ Security Log",callback_data="ad_sec"))
+  bot.send_message(chat_id,f"👑 ADMIN V4.5 SECURE - 7 Buttons\nUsers: {len(db)}\nBlocked IPs: {len(blocked)}",reply_markup=k);return
  if tid==OWNER:
   if d=="ad_users":
    txt="👥 USERS:\n"
@@ -144,7 +206,7 @@ def cb(c):
    bot.send_message(chat_id,txt);return
   if d=="ad_stats":
    tot=sum(u.get('total',0) for u in db.values());ver=sum(1 for u in db.values() if u.get('verified'))
-   bot.send_message(chat_id,f"📊 STATS\nUsers: {len(db)}\nVerified: {ver}\nTotal Deposits: ${tot}\nFree: {sum(1 for u in db.values() if u.get('level')=='none')}");return
+   bot.send_message(chat_id,f"📊 STATS\nUsers: {len(db)}\nVerified: {ver}\nTotal Deposits: ${tot}\nFree: {sum(1 for u in db.values() if u.get('level')=='none')}\nBlocked IPs: {len(blocked)}");return
   if d=="ad_deps":
    txt="💵 DEPOSITS:\n"
    for uid,u in db.items():
@@ -155,6 +217,12 @@ def cb(c):
    save(db);bot.send_message(chat_id,"✅ Daily limits reset");return
   if d=="ad_broad": bot.send_message(chat_id,"Send /broadcast YourMessage to broadcast");return
   if d=="ad_ban": bot.send_message(chat_id,"Send /ban USER_ID to ban\n/unban USER_ID");return
+  if d=="ad_sec":
+   txt="🛡️ SECURITY LOG (last 10):\n"
+   for s in sec_log[-10:]:
+    txt+=f"{s.get('ip')} {s.get('status')} gid:{s.get('gid','-')} ${s.get('sum','-')}\n"
+   txt+=f"\nBlocked IPs: {list(blocked.keys())[:5]}"
+   bot.send_message(chat_id,txt);return
  if d=="dep":
   k=types.InlineKeyboardMarkup();k.add(types.InlineKeyboardButton("Register",url=LINK+"?click_id="+tid))
   bot.send_message(chat_id,f"💰 Deposit:\n{LINK}?click_id={tid}\nMin $20 Starter\n$50 Pro\n$100 VIP",reply_markup=k);return
