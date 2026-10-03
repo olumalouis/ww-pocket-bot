@@ -141,34 +141,4 @@ def start(m):
 
 @bot.message_handler(commands=["admin","users","stats","panel"])
 def admin_cmd(m):
-    if str(m.from_user.id)!=OWNER: return
-    clean_chat(m.chat.id, m.message_id)
-    total_users=len(db)
-    verified=sum(1 for u in db.values() if u.get("verified"))
-    k=types.InlineKeyboardMarkup(row_width=2)
-    k.add(types.InlineKeyboardButton("Users List",callback_data="admin_users"),types.InlineKeyboardButton("Stats",callback_data="admin_stats"))
-    k.add(types.InlineKeyboardButton("Broadcast",callback_data="admin_bc"),types.InlineKeyboardButton("Ban Menu",callback_data="admin_ban"))
-    k.add(types.InlineKeyboardButton("Deposits",callback_data="admin_deps"),types.InlineKeyboardButton("Reset Daily",callback_data="admin_reset"))
-    txt="ADMIN PANEL V3.5 Users: " + str(total_users) + " Verified: " + str(verified)
-    send_clean(m.chat.id, txt, reply_markup=k)
-
-@bot.callback_query_handler(func=lambda c: True)
-def cb(c):
-    tid=str(c.from_user.id); d=c.data
-    if d.startswith("admin"):
-        if tid!=OWNER: return
-        try: bot.delete_message(c.message.chat.id, c.message.message_id)
-        except: pass
-        if d=="admin":
-            total_users=len(db); verified=sum(1 for u in db.values() if u.get("verified"))
-            k=types.InlineKeyboardMarkup(row_width=2)
-            k.add(types.InlineKeyboardButton("Users List",callback_data="admin_users"),types.InlineKeyboardButton("Stats",callback_data="admin_stats"))
-            k.add(types.InlineKeyboardButton("Broadcast",callback_data="admin_bc"),types.InlineKeyboardButton("Ban Menu",callback_data="admin_ban"))
-            k.add(types.InlineKeyboardButton("Deposits",callback_data="admin_deps"),types.InlineKeyboardButton("Reset Daily",callback_data="admin_reset"))
-            txt="ADMIN Users: " + str(total_users) + " Verified: " + str(verified)
-            send_clean(c.message.chat.id, txt, reply_markup=k)
-            return
-        if d=="admin_users":
-            txt="USERS PANEL\n\n"
-            for uid,u in list(db.items())[:20]:
-                line = str(uid) + " | " +
+    if str(m.from_user.id
