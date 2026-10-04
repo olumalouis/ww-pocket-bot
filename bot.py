@@ -177,8 +177,7 @@ def start(m):
  k.add(types.InlineKeyboardButton("Deposit",callback_data="dep"),types.InlineKeyboardButton("My Status",callback_data="bal"))
  k.add(types.InlineKeyboardButton("Register",url=LINK+"?click_id="+tid),types.InlineKeyboardButton("Support",callback_data="sup"))
  if tid==OWNER: k.add(types.InlineKeyboardButton("ADMIN PANEL",callback_data="admin"))
- bot.send_message(m.chat.id,f"WELCOME V8\nLevel: {lvl.upper()}\nSTARTER 20/day 65-70%\nPRO 100/day 65-75%\nVIP Unlimited 75-85%\nLink: {LINK}?click_id={tid}",reply_markup=k)
-    @bot.message_handler(func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
+ bot.send_message(m.chat.id,f"WELCOME V8\nLevel: {lvl.upper()}\nSTARTER 20/day 65-70%\nPRO 100/day 65-75%\nVIP Unlimited 75-85%\nLink: {LINK}?click_id={tid}",reply_markup=k)@bot.message_handler(func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
 def broadcast_send(m):
     target=broadcast_pending.get(str(m.from_user.id))
     msg_text=m.text or m.caption or ""
