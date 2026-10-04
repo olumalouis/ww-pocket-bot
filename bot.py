@@ -1,6 +1,6 @@
-import os, json, random, time, hashlib, hmac, telebot
+import os, json, random, time, hashlib, hmac, telebot, threading
 from telebot import types
-from datetime import date
+from datetime import date, datetime, timedelta
 from flask import Flask, request, abort
 TOKEN=os.getenv("BOT_TOKEN","").strip()
 LINK=os.getenv("LINK","https://poafficl.com/click")
@@ -8,6 +8,7 @@ SECRET=os.getenv("SECRET","kazi_secret")
 OWNER=str(os.getenv("OWNER_ID","")).strip()
 DB="/tmp/db.json"
 ADMIN_DB="/tmp/admin_stats.json"
+BROADCAST_DB="/tmp/broadcast.json"
 REAL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/GBP","EUR/JPY","GBP/JPY","EUR/AUD","USD/CHF","NZD/USD","EUR/CAD","GBP/CAD","AUD/JPY","GBP/AUD"]
 OTC=["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","AUD/USD OTC","EUR/GBP OTC","USD/CAD OTC","EUR/JPY OTC","GBP/JPY OTC","AUD/JPY OTC","EUR/AUD OTC","USD/CHF OTC","NZD/USD OTC","EUR/CAD OTC","GBP/CAD OTC","AUD/CAD OTC","GBP/AUD OTC","EUR/NZD OTC","AUD/NZD OTC","CHF/JPY OTC","EUR/CHF OTC","GBP/CHF OTC","AUD/CHF OTC","NZD/JPY OTC","CAD/JPY OTC","CAD/CHF OTC","USD/BRL OTC","USD/INR OTC","USD/TRY OTC","USD/ZAR OTC","USD/MXN OTC"]
 EXP=["M1","M2","M3","M5"]
@@ -17,6 +18,8 @@ if not os.path.exists(DB):
     with open(DB,"w") as f: json.dump({},f)
 if not os.path.exists(ADMIN_DB):
     with open(ADMIN_DB,"w") as f: json.dump({"total_wins":0,"total_losses":0},f)
+if not os.path.exists(BROADCAST_DB):
+    with open(BROADCAST_DB,"w") as f: json.dump([],f)
 def load_db():
     try:
         with open(DB,"r") as f: return json.load(f)
@@ -31,8 +34,16 @@ def load_admin():
     except: return {"total_wins":0,"total_losses":0}
 def save_admin(d):
     with open(ADMIN_DB,"w") as f: json.dump(d,f)
+def load_broadcast():
+    try:
+        with open(BROADCAST_DB,"r") as f: return json.load(f)
+    except: return []
+def save_broadcast(d):
+    with open(BROADCAST_DB,"w") as f: json.dump(d,f)
+
 db=load_db()
 broadcast_pending={}
+broadcast_content_pending={}
 sec_log=[]
 def ensure(uid):
     uid=str(uid)
@@ -79,7 +90,7 @@ def get_real_signal(pair,exp,lvl):
 @app.route("/bot", methods=["GET","POST"])
 def main_webhook():
     if request.method=="GET":
-        return "OK KAZI V9.5 FINAL 🔥"
+        return "OK KAZI V10 FINAL 🔥"
     try:
         js=request.get_data().decode("utf-8")
         if not js: return "OK"
@@ -96,20 +107,49 @@ def postback():
     if sig!="" and sig!=calc: abort(403)
     try: s=float(sum_val)
     except: s=0
-    lvl="none"
-    if s>=100: lvl="vip"
-    elif s>=50: lvl="pro"
-    elif s>=20: lvl="starter"
     d=load_db()
     u=d.get(click_id,{"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0})
     u["total"]=u.get("total",0)+s
+    total=u["total"]
+    lvl="none"
+    if total>=100: lvl="vip"
+    elif total>=50: lvl="pro"
+    elif total>=20: lvl="starter"
     order={"none":0,"starter":1,"pro":2,"vip":3}
-    if order.get(lvl,0)>order.get(u.get("level","none"),0): u["level"]=lvl
+    old_lvl=u.get("level","none")
+    if order.get(lvl,0)>order.get(old_lvl,0): u["level"]=lvl
     if lvl!="none": u["verified"]=True
     d[click_id]=u;save(d)
-    try: bot.send_message(click_id, f"✅ DEPOSIT CONFIRMED ${s} 💰 Level {u.get('level').upper()} 👑 Verified!")
+    try:
+        if order.get(lvl,0)>order.get(old_lvl,0):
+            bot.send_message(click_id, f"✅ DEPOSIT CONFIRMED ${s} 💰 Total ${total} 👑 UPGRADED to {u.get('level').upper()}! 🔥")
+        else:
+            bot.send_message(click_id, f"✅ DEPOSIT CONFIRMED ${s} 💰 Total ${total} Level {u.get('level').upper()} 👑")
     except: pass
     return "OK"
+def auto_delete_worker():
+    while True:
+        try:
+            lst=load_broadcast()
+            now=datetime.now()
+            new_lst=[]
+            for item in lst:
+                try:
+                    del_at=datetime.fromisoformat(item["delete_at"])
+                    if now>=del_at:
+                        try: bot.delete_message(item["chat_id"], item["msg_id"])
+                        except: pass
+                    else:
+                        new_lst.append(item)
+                except:
+                    new_lst.append(item)
+            if len(new_lst)!=len(lst):
+                save_broadcast(new_lst)
+        except: pass
+        time.sleep(3600)
+
+threading.Thread(target=auto_delete_worker, daemon=True).start()
+
 @bot.message_handler(commands=["start"])
 def start_cmd(m):
     uid=str(m.from_user.id)
@@ -136,25 +176,20 @@ def clearme(m):
     u=ensure(uid)
     u["today"]=0;u["wins"]=0;u["losses"]=0;u["win_streak"]=0;u["loss_streak"]=0
     db[uid]=u;save(db)
-    bot.send_message(m.chat.id,"✅ Reset done! 🔄")@bot.message_handler(func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
+    bot.send_message(m.chat.id,"✅ Reset done! 🔄")
+
+@bot.message_handler(func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
 def broadcast_send(m):
     target=broadcast_pending.get(str(m.from_user.id))
     msg_text=m.text or ""
-    cnt=0;d=load_db()
-    for uid,u in list(d.items()):
-        lvl=u.get("level","none");ver=u.get("verified",False);send=False
-        if target=="ALL": send=True
-        elif target=="FREE" and not ver: send=True
-        elif target=="STARTER" and lvl=="starter": send=True
-        elif target=="PRO" and lvl=="pro": send=True
-        elif target=="VIP" and lvl=="vip": send=True
-        elif target=="ALLVIP" and lvl in ["starter","pro","vip"]: send=True
-        if send:
-            try: bot.send_message(uid, f"{msg_text}");cnt+=1;time.sleep(0.05)
-            except: pass
+    broadcast_content_pending[str(m.from_user.id)] = {"target": target, "text": msg_text}
     del broadcast_pending[str(m.from_user.id)]
-    bot.send_message(m.chat.id,f"✅ Broadcast Sent {cnt} users 🎯 Target {target}")
-@bot.message_handler(commands=["adduser","broadcast","ban","unban"])
+    k=types.InlineKeyboardMarkup(row_width=2)
+    k.add(types.InlineKeyboardButton("♾️ No Delete",callback_data="del_none"))
+    k.add(types.InlineKeyboardButton("🗓️ 1 Week",callback_data="del_7"),types.InlineKeyboardButton("📅 1 Month",callback_data="del_30"))
+    k.add(types.InlineKeyboardButton("📆 3 Months",callback_data="del_90"),types.InlineKeyboardButton("🗓️ 6 Months",callback_data="del_180"))
+    k.add(types.InlineKeyboardButton("📅 1 Year",callback_data="del_365"))
+    bot.send_message(m.chat.id,f"✅ Message saved!\n🎯 Target: {target}\n\n⏰ Select auto-delete time for broadcast:",reply_markup=k)@bot.message_handler(commands=["adduser","broadcast","ban","unban"])
 def admin_cmds(m):
     if str(m.from_user.id)!=OWNER: return
     args=m.text.split(" ",1);cmd=args[0].replace("/","").split("@")[0]
@@ -242,7 +277,7 @@ def cb(c):
             k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
             k.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
             k.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
-            bot.send_message(chat_id,f"👑 ADMIN V9.5 👑\n👥 Users {len(load_db())}",reply_markup=k);return
+            bot.send_message(chat_id,f"👑 ADMIN V10 👑\n👥 Users {len(load_db())}",reply_markup=k);return
         if tid==OWNER and d.startswith("ad_"):
             if d=="ad_users":
                 txt="👥 Users:\n"
@@ -283,6 +318,43 @@ def cb(c):
                 txt="🔒 Log:\n"
                 for s in sec_log[-10:]: txt+=f"{s.get('ip')} {s.get('status')}\n"
                 bot.send_message(chat_id,txt);return
+        if tid==OWNER and d.startswith("del_"):
+            content = broadcast_content_pending.get(tid)
+            if not content:
+                bot.send_message(chat_id,"❌ No broadcast pending");return
+            msg_text=content["text"];target=content["target"]
+            days_str=d.replace("del_","")
+            delete_days=None
+            if days_str!="none":
+                delete_days=int(days_str)
+            cnt=0;dbs=load_db()
+            b_list=load_broadcast()
+            delete_at=None
+            if delete_days:
+                delete_at = datetime.now() + timedelta(days=delete_days)
+            for uid,u in list(dbs.items()):
+                lvl_u=u.get("level","none");ver=u.get("verified",False);send=False
+                if target=="ALL": send=True
+                elif target=="FREE" and not ver: send=True
+                elif target=="STARTER" and lvl_u=="starter": send=True
+                elif target=="PRO" and lvl_u=="pro": send=True
+                elif target=="VIP" and lvl_u=="vip": send=True
+                elif target=="ALLVIP" and lvl_u in ["starter","pro","vip"]: send=True
+                if send:
+                    try:
+                        sent=bot.send_message(uid, f"{msg_text}")
+                        cnt+=1
+                        if delete_at:
+                            b_list.append({"chat_id": uid, "msg_id": sent.message_id, "delete_at": delete_at.isoformat()})
+                        time.sleep(0.05)
+                    except: pass
+            if delete_at:
+                save_broadcast(b_list)
+                bot.send_message(chat_id,f"✅ Broadcast Sent {cnt} users 🎯 Target {target}\n⏰ Auto-delete in {delete_days} days!")
+            else:
+                bot.send_message(chat_id,f"✅ Broadcast Sent {cnt} users 🎯 Target {target}\n♾️ No auto-delete")
+            del broadcast_content_pending[tid]
+            return
         if d=="dep":
             k=types.InlineKeyboardMarkup();k.add(types.InlineKeyboardButton("💰 Register + Deposit",url=LINK+"?click_id="+tid))
             bot.send_message(chat_id,f"💰 DEPOSIT NOW 👇\n{LINK}?click_id={tid}",reply_markup=k);return
