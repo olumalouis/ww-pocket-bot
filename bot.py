@@ -7,6 +7,7 @@ LINK=os.getenv("LINK","https://poafficl.com/click")
 SECRET=os.getenv("SECRET","kazi_secret")
 OWNER=str(os.getenv("OWNER_ID","")).strip()
 DB="/tmp/db.json"
+ADMIN_DB="/tmp/admin_stats.json"
 REAL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/GBP","EUR/JPY","GBP/JPY","EUR/AUD","USD/CHF","NZD/USD","EUR/CAD","GBP/CAD","AUD/JPY","GBP/AUD"]
 OTC=["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","AUD/USD OTC","EUR/GBP OTC","USD/CAD OTC","EUR/JPY OTC","GBP/JPY OTC","AUD/JPY OTC","EUR/AUD OTC","USD/CHF OTC","NZD/USD OTC","EUR/CAD OTC","GBP/CAD OTC","AUD/CAD OTC","GBP/AUD OTC","EUR/NZD OTC","AUD/NZD OTC","CHF/JPY OTC","EUR/CHF OTC","GBP/CHF OTC","AUD/CHF OTC","NZD/JPY OTC","CAD/JPY OTC","CAD/CHF OTC","USD/BRL OTC","USD/INR OTC","USD/TRY OTC","USD/ZAR OTC","USD/MXN OTC"]
 EXP=["M1","M2","M3","M5"]
@@ -14,6 +15,8 @@ bot=telebot.TeleBot(TOKEN, threaded=False)
 app=Flask(__name__)
 if not os.path.exists(DB):
     with open(DB,"w") as f: json.dump({},f)
+if not os.path.exists(ADMIN_DB):
+    with open(ADMIN_DB,"w") as f: json.dump({"total_wins":0,"total_losses":0},f)
 def load_db():
     try:
         with open(DB,"r") as f: return json.load(f)
@@ -22,6 +25,12 @@ def save(d):
     with open(DB,"w") as f: json.dump(d,f)
     global db
     db=d
+def load_admin():
+    try:
+        with open(ADMIN_DB,"r") as f: return json.load(f)
+    except: return {"total_wins":0,"total_losses":0}
+def save_admin(d):
+    with open(ADMIN_DB,"w") as f: json.dump(d,f)
 db=load_db()
 broadcast_pending={}
 sec_log=[]
@@ -34,7 +43,13 @@ def ensure(uid):
         save(db)
     u=db[uid]
     if u.get("date")!=str(date.today()):
-        u["today"]=0;u["date"]=str(date.today());save(db)
+        u["today"]=0
+        u["wins"]=0
+        u["losses"]=0
+        u["win_streak"]=0
+        u["loss_streak"]=0
+        u["date"]=str(date.today())
+        save(db)
     if uid==OWNER and OWNER!="":
         u["level"]="vip";u["verified"]=True;save(db)
     return u
@@ -64,7 +79,7 @@ def get_real_signal(pair,exp,lvl):
 @app.route("/bot", methods=["GET","POST"])
 def main_webhook():
     if request.method=="GET":
-        return "OK KAZI V9.4 FINAL 🔥"
+        return "OK KAZI V9.5 FINAL 🔥"
     try:
         js=request.get_data().decode("utf-8")
         if not js: return "OK"
@@ -105,7 +120,7 @@ def start_cmd(m):
     if not u.get("verified"):
         k=types.InlineKeyboardMarkup()
         k.add(types.InlineKeyboardButton("📝 Register Now",url=LINK+"?click_id="+uid))
-        bot.send_message(m.chat.id,f"👋 Welcome {m.from_user.first_name}!\n\n🔥 KAZI SIGNALS V9.4 🔥\n\n👉 Register First:\n{LINK}?click_id={uid}",reply_markup=k)
+        bot.send_message(m.chat.id,f"👋 Welcome {m.from_user.first_name}!\n\n🔥 KAZI SIGNALS V9.5 🔥\n\n👉 Register First:\n{LINK}?click_id={uid}",reply_markup=k)
         return
     k=types.InlineKeyboardMarkup(row_width=2)
     k.add(types.InlineKeyboardButton("🚀 Get Signal 🔥",callback_data="sel_market"))
@@ -178,11 +193,14 @@ def cb(c):
         except: pass
         if d in ["res_win","res_loss"]:
             u=ensure(tid)
+            adm=load_admin()
             if d=="res_win":
                 u["wins"]=u.get("wins",0)+1
                 u["win_streak"]=u.get("win_streak",0)+1
                 u["loss_streak"]=0
                 db[tid]=u;save(db)
+                adm["total_wins"]=adm.get("total_wins",0)+1
+                save_admin(adm)
                 msgs=[
                     f"✅ BOOM! WIN! 🔥💰\n🏆 Streak: {u['win_streak']} Wins!\n🚀 Keep pushing VIP!",
                     f"✅ PERFECT WIN! 💎🔥\n📈 {u['win_streak']} in a row! You're on fire!",
@@ -196,6 +214,8 @@ def cb(c):
                 u["loss_streak"]=u.get("loss_streak",0)+1
                 u["win_streak"]=0
                 db[tid]=u;save(db)
+                adm["total_losses"]=adm.get("total_losses",0)+1
+                save_admin(adm)
                 ls=u.get("loss_streak",0)
                 if ls>=6:
                     bot.send_message(chat_id, f"⚠️ WARNING! {ls} LOSS STREAK 🚫\n\n🧠 Boss, STOP trading now!\n📉 Market is bad today, take a break!\n☕️ Rest 1 hour, clear mind!\n🔄 Come back fresh = WIN again!\n\n💡 Pro traders know when to STOP!\n🛑 Paused for your safety!", reply_markup=signal_keyboard())
@@ -222,7 +242,7 @@ def cb(c):
             k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
             k.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
             k.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
-            bot.send_message(chat_id,f"👑 ADMIN V9.4 👑\n👥 Users {len(load_db())}",reply_markup=k);return
+            bot.send_message(chat_id,f"👑 ADMIN V9.5 👑\n👥 Users {len(load_db())}",reply_markup=k);return
         if tid==OWNER and d.startswith("ad_"):
             if d=="ad_users":
                 txt="👥 Users:\n"
@@ -232,10 +252,11 @@ def cb(c):
                 dd=load_db();tot=sum(u.get('total',0) for u in dd.values());ver=sum(1 for u in dd.values() if u.get('verified'))
                 bot.send_message(chat_id,f"📊 Stats\n👥 U:{len(dd)} ✅ V:{ver} 💰 ${tot}");return
             if d=="ad_wr":
-                dd=load_db();wins=sum(u.get('wins',0) for u in dd.values());losses=sum(u.get('losses',0) for u in dd.values())
+                adm=load_admin()
+                wins=adm.get('total_wins',0);losses=adm.get('total_losses',0)
                 total=wins+losses
                 wr=round(wins/total*100,1) if total>0 else 0
-                bot.send_message(chat_id,f"🏆 REAL WR (Only You)\n✅ {wins} Wins ❌ {losses} Losses\n📊 WR: {wr}%");return
+                bot.send_message(chat_id,f"🏆 REAL WR (Never Resets)\n✅ {wins} Wins ❌ {losses} Losses\n📊 WR: {wr}%");return
             if d=="ad_deps":
                 dd=load_db();txt="💰 Deposits:\n"
                 for uid,u in dd.items():
@@ -296,7 +317,7 @@ f"✅ Maximum Profit\n"
 f"━━━━━━━━━━━━━━━\n"
 f"⚡️ 90% traders choose PRO or VIP!\n"
 f"💸 Deposit now = Instant Upgrade!",reply_markup=k);return
-        if d=="how": bot.send_message(chat_id,"❓ HOW V9.4\n1️⃣ Register\n2️⃣ Deposit\n3️⃣ /start\n4️⃣ Get Signal → Choose Market 🔥");return
+        if d=="how": bot.send_message(chat_id,"❓ HOW V9.5\n1️⃣ Register\n2️⃣ Deposit\n3️⃣ /start\n4️⃣ Get Signal → Choose Market 🔥");return
         if d in ["bal","status"]:
             u=ensure(tid)
             lim_txt="♾️" if lvl=="vip" else "20" if lvl=="starter" else "100" if lvl=="pro" else "3"
