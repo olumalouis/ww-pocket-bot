@@ -310,14 +310,17 @@ def cb(c):
                 kb.add(types.InlineKeyboardButton("👑 VIP",callback_data="broad_VIP"))
                 kb.add(types.InlineKeyboardButton("💰 ALL VIPs",callback_data="broad_ALLVIP"))
                 bot.send_message(chat_id,"🎯 Select broadcast target:",reply_markup=kb);return
-            if d.startswith("broad_"):
-                target=d.replace("broad_","");broadcast_pending[tid]=target
-                bot.send_message(chat_id,f"🎯 Target {target} selected ✅\n\n📝 Now SEND your message (text, emojis, link):");return
             if d=="ad_ban": bot.send_message(chat_id,"🚫 /ban ID /unban ID");return
             if d=="ad_sec":
                 txt="🔒 Log:\n"
                 for s in sec_log[-10:]: txt+=f"{s.get('ip')} {s.get('status')}\n"
                 bot.send_message(chat_id,txt);return
+
+        # FIXED - MOVED OUTSIDE ad_ BLOCK
+        if tid==OWNER and d.startswith("broad_"):
+            target=d.replace("broad_","");broadcast_pending[tid]=target
+            bot.send_message(chat_id,f"🎯 Target {target} selected ✅\n\n📝 Now SEND your message (text, emojis, link):");return
+
         if tid==OWNER and d.startswith("del_"):
             content = broadcast_content_pending.get(tid)
             if not content:
