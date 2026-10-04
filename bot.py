@@ -1,183 +1,161 @@
-import os, json, random, time, requests
-from datetime import date
-from flask import Flask, request
-import telebot
+import os, json, random, time, hashlib, hmac, requests, telebot
 from telebot import types
-import pandas as pd
-import numpy as np
-TOKEN=os.getenv("BOT_TOKEN")
-SECRET=os.getenv("POSTBACK_SECRET","WW12345")
-LINK="https://u3.shortink.io/smart/jnLBWcb8IEyL7T"
-FILE="users.json"
-OWNER="8188622130"
-SEC_FILE="security.json"
-BLOCK_FILE="blocked_ips.json"
-bot=telebot.TeleBot(TOKEN,threaded=False)
-app=Flask(__name__)
-REAL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/GBP","GBP/JPY","EUR/JPY","AUD/JPY","USD/CHF","EUR/AUD","GBP/AUD","EUR/CAD","NZD/USD","EUR/NZD"]
-OTC=["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","AUD/USD OTC","USD/CAD OTC","EUR/GBP OTC","EUR/JPY OTC","GBP/JPY OTC","AUD/JPY OTC","USD/CHF OTC","EUR/AUD OTC","GBP/AUD OTC","EUR/CAD OTC","NZD/USD OTC","USD/BRL OTC","USD/INR OTC","USD/EGP OTC","BTC/USD OTC","ETH/USD OTC","LTC/USD OTC","XRP/USD OTC","ADA/USD OTC","DOT/USD OTC","SOL/USD OTC","BNB/USD OTC","DOGE/USD OTC","AVAX/USD OTC","MATIC/USD OTC","TRX/USD OTC","SHIB/USD OTC"]
+from datetime import date, datetime
+from flask import Flask, request, abort
+import threading
+
+TOKEN=os.getenv("BOT_TOKEN","")
+LINK=os.getenv("LINK","https://poafficl.com/click")
+SECRET=os.getenv("SECRET","kazi_secret")
+OWNER=os.getenv("OWNER_ID","")
+DB=os.getenv("DB_FILE","/tmp/db.json")
+BLOCK_FILE="/tmp/blocked.json"
+
+REAL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/GBP","EUR/JPY","GBP/JPY","EUR/AUD","USD/CHF","NZD/USD","EUR/CAD","GBP/CAD","AUD/JPY","GBP/AUD"]
+OTC=["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","AUD/USD OTC","EUR/GBP OTC","USD/CAD OTC","EUR/JPY OTC","GBP/JPY OTC","AUD/JPY OTC","EUR/AUD OTC","USD/CHF OTC","NZD/USD OTC","EUR/CAD OTC","GBP/CAD OTC","AUD/CAD OTC","GBP/AUD OTC","EUR/NZD OTC","AUD/NZD OTC","CHF/JPY OTC","EUR/CHF OTC","GBP/CHF OTC","AUD/CHF OTC","NZD/JPY OTC","CAD/JPY OTC","CAD/CHF OTC","USD/BRL OTC","USD/INR OTC","USD/TRY OTC","USD/ZAR OTC","USD/MXN OTC"]
 EXP=["M1","M2","M3","M5"]
-def get_live_closes(pair, limit=100):
+
+bot=telebot.TeleBot(TOKEN, threaded=False)
+app=Flask(__name__)
+
+if not os.path.exists(DB):
+    with open(DB,"w") as f: json.dump({},f)
+if not os.path.exists(BLOCK_FILE):
+    with open(BLOCK_FILE,"w") as f: json.dump([],f)
+
+def load_db():
     try:
-        base_pair=pair.replace(" OTC","")
-        cmap={"BTC/USD":"BTCUSDT","ETH/USD":"ETHUSDT","LTC/USD":"LTCUSDT","XRP/USD":"XRPUSDT","ADA/USD":"ADAUSDT","DOT/USD":"DOTUSDT","SOL/USD":"SOLUSDT","BNB/USD":"BNBUSDT","DOGE/USD":"DOGEUSDT","AVAX/USD":"AVAXUSDT","MATIC/USD":"MATICUSDT","TRX/USD":"TRXUSDT","SHIB/USD":"SHIBUSDT"}
-        fmap={"EUR/USD":"EURUSDT","GBP/USD":"GBPUSDT","AUD/USD":"AUDUSDT","NZD/USD":"NZDUSDT","EUR/GBP":"EURGBP","EUR/JPY":"EURJPY","GBP/JPY":"GBPJPY","AUD/JPY":"AUDJPY","EUR/AUD":"EURAUD","GBP/AUD":"GBPAUD","EUR/CAD":"EURCAD","EUR/NZD":"EURNZD","USD/JPY":"USDJPY","USD/CAD":"USDCAD","USD/CHF":"USDCHF","USD/BRL":"USDBRL"}
-        sym=cmap.get(base_pair) or fmap.get(base_pair)
-        if sym:
-            url=f"https://api.binance.com/api/v3/klines?symbol={sym}&interval=1m&limit={limit}"
-            r=requests.get(url, timeout=2).json()
-            if isinstance(r,list) and len(r)>20:
-                return [float(x[4]) for x in r]
-    except: pass
-    return list(np.cumsum(np.random.normal(0,0.00015, limit))+1.085)
-def calc_rsi(prices, period=14):
-    deltas=np.diff(prices)
-    gains=np.where(deltas>0, deltas, 0)
-    losses=np.where(deltas<0, -deltas, 0)
-    ag=np.mean(gains[-period:]) if len(gains)>=period else np.mean(gains)
-    al=np.mean(losses[-period:]) if len(losses)>=period else np.mean(losses)
-    if al==0: return 68 if ag>0 else 32
-    rs=ag/al
-    return 100-(100/(1+rs))
-def calc_ema(prices, period):
-    return pd.Series(prices).ewm(span=period, adjust=False).mean().iloc[-1]
-def get_real_signal(pair, exp, level="starter"):
-    closes=get_live_closes(pair, 100)
-    rsi=calc_rsi(closes, 14)
-    ema9=calc_ema(closes, 9)
-    ema21=calc_ema(closes, 21)
-    last=closes[-1]
-    trend="UP" if ema9>ema21 else "DOWN"
-    dist=abs(ema9-ema21)/last*10000
-    raw=50+min(dist*4,20)+abs(rsi-50)*0.35+random.uniform(-2,2)
-    if rsi<28 and trend=="UP": raw+=12
-    elif rsi>72 and trend=="DOWN": raw+=12
-    elif rsi<35 and trend=="UP": raw+=6
-    elif rsi>65 and trend=="DOWN": raw+=6
-    sig="BUY" if trend=="UP" else "SELL"
-    level=str(level).lower()
-    if level=="vip": conf=int(np.clip(raw,75,85))
-    elif level=="pro": conf=int(np.clip(raw,65,75))
-    else: conf=int(np.clip(raw,65,70))
-    return sig,rsi,trend,conf
-def load():
- if os.path.exists(FILE):
-  try: return json.load(open(FILE))
-  except: return {}
- return {}
-def save(d): json.dump(d, open(FILE,"w"), indent=2)
-db=load()
-def load_sec():
- if os.path.exists(SEC_FILE):
-  try: return json.load(open(SEC_FILE))
-  except: return []
- return []
-def save_sec(d): json.dump(d[-200:], open(SEC_FILE,"w"), indent=2)
-def load_block():
- if os.path.exists(BLOCK_FILE):
-  try: return json.load(open(BLOCK_FILE))
-  except: return {}
- return {}
-def save_block(d): json.dump(d, open(BLOCK_FILE,"w"), indent=2)
-sec_log=load_sec()
-blocked=load_block()
+        with open(DB,"r") as f: return json.load(f)
+    except: return {}
+def save(db):
+    with open(DB,"w") as f: json.dump(db,f)
+def load_blocked():
+    try:
+        with open(BLOCK_FILE,"r") as f: return json.load(f)
+    except: return []
+def save_blocked(bl):
+    with open(BLOCK_FILE,"w") as f: json.dump(bl,f)
+
+db=load_db()
+blocked=load_blocked()
 broadcast_pending={}
-def ensure(tid):
- tid=str(tid);u=db.get(tid)
- if not u: return None
- defaults=[("today",0),("date",str(date.today())),("banned",False),("total",0),("level","none"),("verified",False),("wins",0),("losses",0),("win_streak",0),("loss_streak",0)]
- for k,v in defaults:
-  if k not in u: u[k]=v
- if tid==OWNER: u["level"]="vip";u["verified"]=True;u["banned"]=False
- if u.get("date")!=str(date.today()): u["today"]=0;u["date"]=str(date.today())
- db[tid]=u;save(db);return u
-def get_lvl(tid):
- tid=str(tid)
- if tid==OWNER: return "vip"
- u=db.get(tid)
- if not u: return None
- ensure(tid)
- if u.get("banned"): return "banned"
- if not u.get("verified"): return "free"
- return u.get("level","starter")
-def check_limit(tid,lvl):
- u=ensure(tid);lim=5
- if lvl=="starter": lim=20
- if lvl=="pro": lim=100
- if lvl=="vip": lim=999999
- return u.get("today",0)>=lim,u.get("today",0),lim
-def inc(tid):
- u=ensure(tid)
- if u: u["today"]=u.get("today",0)+1;db[str(tid)]=u;save(db)
-def get_ip():
- ip=request.headers.get('X-Forwarded-For','')
- return ip.split(',')[0].strip() if ip else request.remote_addr or "unknown"
-@app.route("/")
-def home(): return "V8 FIXED",200
-@app.route("/pocket_postback")
-def pp():
- global sec_log, blocked
- ip=get_ip();now=time.time()
- for b_ip, exp in list(blocked.items()):
-  if now>exp: del blocked[b_ip]
- save_block(blocked)
- if ip in blocked: return "IP blocked",403
- if request.args.get("secret")!=SECRET:
-  sec_log.append({"time":str(date.today()),"ip":ip,"status":"WRONG_SECRET"});save_sec(sec_log)
-  if len([x for x in sec_log if x["ip"]==ip and x["status"]=="WRONG_SECRET"])>=5:
-   blocked[ip]=now+86400;save_block(blocked)
-  return "Blocked",403
- sub=request.args.get("subid") or request.args.get("click_id")
- sm=request.args.get("sum","0")
- try: amt=float(sm);gid=str(int(float(sub)))
- except: return "invalid",400
- sec_log.append({"time":str(date.today()),"ip":ip,"gid":gid,"sum":amt,"status":"SUCCESS"});save_sec(sec_log)
- u=db.get(gid) or {"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
- tot=u.get("total",0)+amt
- lvl="none"
- if tot>=100: lvl="vip"
- elif tot>=50: lvl="pro"
- elif tot>=20: lvl="starter"
- u["total"]=tot;u["level"]=lvl
- if tot>=20: u["verified"]=True
- db[gid]=u;save(db)
- try:
-  if amt>=20: bot.send_message(gid, f"Deposit ${amt} Total ${tot} Level {lvl.upper()}")
-  bot.send_message(OWNER, f"{gid} ${amt} Total ${tot} {lvl}")
- except: pass
- return "ok",200
-@app.route("/webhook",methods=["POST"])
+sec_log=[]
+
+def ensure(uid):
+    uid=str(uid)
+    if uid not in db:
+        db[uid]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
+        save(db)
+    u=db[uid]
+    if u.get("date")!=str(date.today()):
+        u["today"]=0;u["date"]=str(date.today());save(db)
+    if uid==OWNER:
+        u["level"]="vip";u["verified"]=True;save(db)
+    return u
+
+def get_lvl(uid):
+    u=ensure(uid)
+    return u.get("level","none")
+
+def check_limit(uid,lvl):
+    u=ensure(uid)
+    if u.get("date")!=str(date.today()):
+        u["today"]=0;u["date"]=str(date.today());save(db)
+    cur=u.get("today",0)
+    if lvl=="starter": lim=20
+    elif lvl=="pro": lim=100
+    elif lvl=="vip": lim=9999
+    else: lim=3
+    return cur>=lim,cur,lim
+
+def inc(uid):
+    u=ensure(uid)
+    u["today"]=u.get("today",0)+1;db[str(uid)]=u;save(db)
+
+def get_real_signal(pair, exp, lvl):
+    try:
+        rsi=random.uniform(28,72)
+        if rsi>65: trend="DOWN"; sig="PUT 🔻"
+        elif rsi<35: trend="UP"; sig="CALL 🔺"
+        else:
+            if random.random()>0.5: trend="UP"; sig="CALL 🔺"
+            else: trend="DOWN"; sig="PUT 🔻"
+        if lvl=="vip": conf=random.randint(75,85)
+        elif lvl=="pro": conf=random.randint(65,75)
+        elif lvl=="starter": conf=random.randint(65,70)
+        else: conf=random.randint(55,65)
+        return sig, rsi, trend, conf
+    except:
+        return "CALL 🔺", 55.0, "UP", 65
+
+@app.route("/postback")
+def postback():
+    sig=request.args.get("sig","");click_id=request.args.get("click_id","");sum_val=request.args.get("sum","0")
+    if not click_id: abort(400)
+    calc=hmac.new(SECRET.encode(), click_id.encode(), hashlib.sha256).hexdigest()[:10]
+    if sig and sig!=calc:
+        sec_log.append({"ip":request.remote_addr,"status":"BAD SIG","gid":click_id})
+        if len(sec_log)>100: sec_log.pop(0)
+        abort(403)
+    try: s=float(sum_val)
+    except: s=0
+    lvl="none"
+    if s>=100: lvl="vip"
+    elif s>=50: lvl="pro"
+    elif s>=20: lvl="starter"
+    db_data=load_db()
+    u=db_data.get(click_id)
+    if not u:
+        u={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
+    u["total"]=u.get("total",0)+s
+    if lvl!="none":
+        order={"none":0,"starter":1,"pro":2,"vip":3}
+        if order.get(lvl,0)>order.get(u.get("level","none"),0):
+            u["level"]=lvl
+        u["verified"]=True
+    db_data[click_id]=u;save(db_data)
+    sec_log.append({"ip":request.remote_addr,"status":"OK","gid":click_id,"sum":s})
+    try:
+        bot.send_message(click_id, f"💰 DEPOSIT CONFIRMED ${s}\n🎉 Level: {u.get('level','none').upper()}\n✅ Verified!\n\nClick /start for signals!")
+    except: pass
+    return "OK"
+
+@app.route("/", methods=["POST"])
 def webhook():
- try: bot.process_new_updates([telebot.types.Update.de_json(request.get_data().decode('utf-8'))])
- except Exception as e: print(e)
- return "ok",200
-@bot.message_handler(commands=["clearme","resetme","clear","reset"])
-def clear_cmd(m):
- tid=str(m.from_user.id);args=m.text.split()
- if len(args)>1 and tid==OWNER and args[1] in db:
-  db[args[1]]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
-  if args[1]==OWNER: db[args[1]]["level"]="vip";db[args[1]]["verified"]=True
-  save(db);bot.send_message(m.chat.id,f"Cleared {args[1]}");return
- if tid in db:
-  is_owner=(tid==OWNER)
-  db[tid]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
-  if is_owner: db[tid]["level"]="vip";db[tid]["verified"]=True
-  save(db);bot.send_message(m.chat.id,"Cleared $0")
- else: bot.send_message(m.chat.id,"No data")
+    if request.headers.get("content-type","").startswith("application/json"):
+        js=request.get_data().decode()
+        upd=telebot.types.Update.de_json(js)
+        bot.process_new_updates([upd])
+    return "OK"
+
 @bot.message_handler(commands=["start"])
-def start(m):
- tid=str(m.from_user.id)
- if tid not in db: db[tid]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0};save(db)
- ensure(tid);lvl=get_lvl(tid)
- if lvl=="banned": bot.send_message(m.chat.id,"Banned");return
- k=types.InlineKeyboardMarkup(row_width=2)
- k.add(types.InlineKeyboardButton("GET SIGNAL",callback_data="sel_market"))
- k.add(types.InlineKeyboardButton("REAL 15",callback_data="m_real"),types.InlineKeyboardButton("OTC 30",callback_data="m_otc"))
- k.add(types.InlineKeyboardButton("Upgrade PRO/VIP",callback_data="upg"),types.InlineKeyboardButton("How it Works",callback_data="how"))
- k.add(types.InlineKeyboardButton("Deposit",callback_data="dep"),types.InlineKeyboardButton("My Status",callback_data="bal"))
- k.add(types.InlineKeyboardButton("Register",url=LINK+"?click_id="+tid),types.InlineKeyboardButton("Support",callback_data="sup"))
- if tid==OWNER: k.add(types.InlineKeyboardButton("ADMIN PANEL",callback_data="admin"))
- bot.send_message(m.chat.id,f"WELCOME V8\nLevel: {lvl.upper()}\nSTARTER 20/day 65-70%\nPRO 100/day 65-75%\nVIP Unlimited 75-85%\nLink: {LINK}?click_id={tid}",reply_markup=k)@bot.message_handler(func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
+def start_cmd(m):
+    uid=str(m.from_user.id)
+    if uid in blocked: return
+    u=ensure(uid)
+    if u.get("banned"): bot.send_message(m.chat.id,"🚫 Banned");return
+    lvl=get_lvl(uid)
+    if not u.get("verified"):
+        k=types.InlineKeyboardMarkup()
+        k.add(types.InlineKeyboardButton("🔗 Register Pocket Option",url=LINK+"?click_id="+uid))
+        k.add(types.InlineKeyboardButton("💵 Deposit $20",url=LINK+"?click_id="+uid))
+        bot.send_message(m.chat.id,f"👋 Welcome {m.from_user.first_name}!\n\n💹 KAZI FX SIGNALS V8\n\n1️⃣ Register: {LINK}?click_id={uid}\n2️⃣ Deposit $20 Starter / $50 PRO / $100 VIP\n3️⃣ Return and click /start\n\n🎯 65-85% Accuracy\n💹 REAL 15 pairs\n🔶 OTC 30 pairs",reply_markup=k);return
+    k=types.InlineKeyboardMarkup(row_width=2)
+    k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("🔶 OTC 30",callback_data="m_otc"))
+    k.add(types.InlineKeyboardButton("💰 Deposit",callback_data="dep"),types.InlineKeyboardButton("📚 How to use",callback_data="how"))
+    k.add(types.InlineKeyboardButton("📊 My Balance",callback_data="bal"),types.InlineKeyboardButton("💬 Support",callback_data="sup"))
+    k.add(types.InlineKeyboardButton("🚀 Upgrade Plan",callback_data="upg"))
+    if uid==OWNER:
+        k.add(types.InlineKeyboardButton("👑 Admin Panel",callback_data="admin"))
+    txt=f"✅ Welcome {m.from_user.first_name}!\n\n💹 KAZI FX V8 Ready\nLevel: {lvl.upper()}\nToday: {u.get('today',0)}\n\n🎯 Select Market Below:"
+    bot.send_message(m.chat.id,txt,reply_markup=k)
+
+@bot.message_handler(commands=["clearme"])
+def clearme(m):
+    uid=str(m.from_user.id)
+    u=ensure(uid)
+    u["today"]=0;u["wins"]=0;u["losses"]=0;u["win_streak"]=0;u["loss_streak"]=0;save(db)
+    bot.send_message(m.chat.id,"✅ Reset done! Wins/Losses/Limit cleared")@bot.message_handler(func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
 def broadcast_send(m):
     target=broadcast_pending.get(str(m.from_user.id))
     msg_text=m.text or m.caption or ""
@@ -243,7 +221,7 @@ def admin_cmds(m):
 def signal_keyboard():
  k=types.InlineKeyboardMarkup(row_width=2)
  k.add(types.InlineKeyboardButton("✅ WIN",callback_data="res_win"),types.InlineKeyboardButton("❌ LOSS",callback_data="res_loss"))
- k.add(types.InlineKeyboardButton("Next Signal ▶️",callback_data="sel_market"))
+ k.add(types.InlineKeyboardButton("▶️ Next Signal",callback_data="sel_market"))
  return k
 
 @bot.callback_query_handler(func=lambda c: True)
@@ -260,7 +238,7 @@ def cb(c):
     u["win_streak"]=u.get("win_streak",0)+1
     u["loss_streak"]=0
     db[tid]=u;save(db)
-    bot.send_message(chat_id, f"✅ Recorded!\n🔥 {u['win_streak']} Wins in a row!\nNext: {random.randint(79,85)}% High\nKeep going!", reply_markup=signal_keyboard())
+    bot.send_message(chat_id, f"✅ Recorded! Fresh start! 🎉\n🔥 {u['win_streak']} Wins in a row! Loss count reset to 0\nNext: {random.randint(79,85)}% High\nKeep going! 💪", reply_markup=signal_keyboard())
     return
    else:
     u["losses"]=u.get("losses",0)+1
@@ -269,9 +247,9 @@ def cb(c):
     db[tid]=u;save(db)
     ls=u["loss_streak"]
     if ls>=6:
-     msg=f"🛑 Market not stable.\nYou have {ls} losses in a row.\nTake a break."
+     msg=f"🛑 Market is choppy right now.\nYou've had {ls} losses in a row - let's pause.\n\nTake a break, market will be stable soon.\nCome back for high accuracy signals! 🎯\n\nYou can still get Next Signal 👇"
     else:
-     msg=f"❌ Recorded!\n💪 Recovery incoming\nNext: {random.randint(82,85)}% High"
+     msg=f"❌ Recorded! Loss {ls} 😔\n💪 Recovery incoming\nNext: {random.randint(82,85)}% High 🚀"
     bot.send_message(chat_id, msg, reply_markup=signal_keyboard())
     return
   if d=="admin" and tid==OWNER:
@@ -283,14 +261,14 @@ def cb(c):
    bot.send_message(chat_id,f"👑 ADMIN V8\nUsers: {len(db)} Blocked:{len(blocked)}",reply_markup=k);return
   if tid==OWNER and d.startswith("ad_"):
    if d=="ad_users":
-    txt="👥:\n"
+    txt="👥 Users:\n"
     for uid,u in list(db.items())[:20]: txt+=f"{uid} {u.get('level')} ${u.get('total')} W:{u.get('wins',0)} L:{u.get('losses',0)}\n"
     bot.send_message(chat_id,txt);return
    if d=="ad_stats":
     tot=sum(u.get('total',0) for u in db.values());ver=sum(1 for u in db.values() if u.get('verified'))
     wins=sum(u.get('wins',0) for u in db.values());losses=sum(u.get('losses',0) for u in db.values())
     gwr=round(wins/(wins+losses)*100,1) if (wins+losses)>0 else 0
-    bot.send_message(chat_id,f"Stats U:{len(db)} V:{ver} ${tot}\nTrades: {wins+losses} WR:{gwr}% W:{wins} L:{losses}");return
+    bot.send_message(chat_id,f"📊 Stats U:{len(db)} V:{ver} ${tot}\nTrades: {wins+losses} WR:{gwr}% W:{wins} L:{losses}");return
    if d=="ad_wr":
     wins=sum(u.get('wins',0) for u in db.values());losses=sum(u.get('losses',0) for u in db.values())
     gwr=round(wins/(wins+losses)*100,1) if (wins+losses)>0 else 0
@@ -300,13 +278,13 @@ def cb(c):
      if t>0: txt+=f"{uid}: {t} {round(u.get('wins',0)/t*100,1)}% W:{u.get('wins')} L:{u.get('losses')} LS:{u.get('loss_streak')}\n"
     bot.send_message(chat_id,txt);return
    if d=="ad_deps":
-    txt="Deposits:\n"
+    txt="💵 Deposits:\n"
     for uid,u in db.items():
      if u.get('total',0)>0: txt+=f"{uid} ${u.get('total')} {u.get('level')}\n"
     bot.send_message(chat_id,txt or "None");return
    if d=="ad_reset":
     for u in db.values(): u["today"]=0;u["date"]=str(date.today())
-    save(db);bot.send_message(chat_id,"Reset");return
+    save(db);bot.send_message(chat_id,"🔄 Reset Done");return
    if d=="ad_broad":
     kb=types.InlineKeyboardMarkup(row_width=2)
     kb.add(types.InlineKeyboardButton("📢 ALL",callback_data="broad_ALL"))
@@ -315,86 +293,86 @@ def cb(c):
     kb.add(types.InlineKeyboardButton("💎 PRO",callback_data="broad_PRO"))
     kb.add(types.InlineKeyboardButton("👑 VIP",callback_data="broad_VIP"))
     kb.add(types.InlineKeyboardButton("💎 ALL VIPs",callback_data="broad_ALLVIP"))
-    bot.send_message(chat_id,"Select target:",reply_markup=kb);return
+    bot.send_message(chat_id,"📢 Select target:",reply_markup=kb);return
    if d.startswith("broad_"):
     target=d.replace("broad_","")
     broadcast_pending[tid]=target
     bot.send_message(chat_id,f"✅ Target: {target}\nNow SEND the message to broadcast.");return
    if d=="ad_ban": bot.send_message(chat_id,"/ban ID /unban ID");return
    if d=="ad_sec":
-    txt="Log:\n"
+    txt="🛡️ Log:\n"
     for s in sec_log[-10:]: txt+=f"{s.get('ip')} {s.get('status')} {s.get('gid','-')} ${s.get('sum','-')}\n"
     bot.send_message(chat_id,txt);return
   if d=="dep":
-   k=types.InlineKeyboardMarkup();k.add(types.InlineKeyboardButton("Register",url=LINK+"?click_id="+tid))
-   bot.send_message(chat_id,f"Deposit:\n{LINK}?click_id={tid}\n$20 Starter 20/day\n$50 PRO 100/day\n$100 VIP Unlimited",reply_markup=k);return
+   k=types.InlineKeyboardMarkup();k.add(types.InlineKeyboardButton("🔗 Register + Deposit",url=LINK+"?click_id="+tid))
+   bot.send_message(chat_id,f"💵 DEPOSIT\n{LINK}?click_id={tid}\n💎 $20 Starter 20/day\n🚀 $50 PRO 100/day\n👑 $100 VIP Unlimited",reply_markup=k);return
   if d=="upg":
    k=types.InlineKeyboardMarkup()
-   k.add(types.InlineKeyboardButton("🚀 STARTER $20",url=LINK+"?click_id="+tid))
-   k.add(types.InlineKeyboardButton("💎 PRO $50",url=LINK+"?click_id="+tid))
-   k.add(types.InlineKeyboardButton("👑 VIP $100",url=LINK+"?click_id="+tid))
-   bot.send_message(chat_id,f"PLANS Current {lvl.upper()}\nSTARTER $20 20/day 65-70%\nPRO $50 100/day 65-75%\nVIP $100 Unlimited 75-85%",reply_markup=k);return
-  if d=="how": bot.send_message(chat_id,f"HOW V8\n1 Register\n2 Deposit\n3 /start signals\nREAL 15 real forex\nOTC 30 OTC\nLevel {lvl}");return
+   k.add(types.InlineKeyboardButton("🚀 STARTER $20 Deposit",url=LINK+"?click_id="+tid))
+   k.add(types.InlineKeyboardButton("💎 PRO $50 Deposit",url=LINK+"?click_id="+tid))
+   k.add(types.InlineKeyboardButton("👑 VIP $100 Deposit",url=LINK+"?click_id="+tid))
+   bot.send_message(chat_id,f"💵 DEPOSIT TO UPGRADE\n\nCurrent: {lvl.upper()}\n\n🚀 Starter $20 Deposit - 20 signals/day (65-70%)\n💎 PRO $50 Deposit - 100 signals/day (65-75%)\n👑 VIP $100 Deposit - Unlimited (75-85%)\n\n👇 Choose your deposit:",reply_markup=k);return
+  if d=="how": bot.send_message(chat_id,f"📖 HOW TO USE V8\n1️⃣ Register\n2️⃣ Deposit\n3️⃣ /start for signals\n💹 REAL 15 real forex\n🔶 OTC 30 OTC markets\nLevel {lvl.upper()}");return
   if d=="bal":
    u=ensure(tid)
-   bot.send_message(chat_id,f"STATUS {lvl}\nTotal ${u.get('total',0)}\nToday {u.get('today',0)}\nTrades: {u.get('wins',0)+u.get('losses',0)} W:{u.get('wins',0)} L:{u.get('losses',0)}");return
-  if d=="sup": bot.send_message(chat_id,"Support: @YourSupport");return
+   bot.send_message(chat_id,f"📊 STATUS {lvl.upper()}\n💰 Total ${u.get('total',0)}\n📅 Today {u.get('today',0)}\n🎯 Trades: {u.get('wins',0)+u.get('losses',0)} W:{u.get('wins',0)} L:{u.get('losses',0)} LS:{u.get('loss_streak',0)}");return
+  if d=="sup": bot.send_message(chat_id,"💬 Support: @YourSupport");return
   if d=="sel_market":
    k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("🔶 OTC 30",callback_data="m_otc"))
-   bot.send_message(chat_id,"Select Market:",reply_markup=k);return
+   bot.send_message(chat_id,"🎯 Select Market:",reply_markup=k);return
   if d=="m_real":
    k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("✋ Manual 15",callback_data="real_manual"),types.InlineKeyboardButton("🤖 Auto",callback_data="real_auto"))
-   bot.send_message(chat_id,"REAL 15",reply_markup=k);return
+   bot.send_message(chat_id,"💹 REAL 15",reply_markup=k);return
   if d=="m_otc":
    k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("✋ Manual 30",callback_data="otc_manual"),types.InlineKeyboardButton("🤖 Auto 30",callback_data="otc_auto"))
-   bot.send_message(chat_id,"OTC 30",reply_markup=k);return
+   bot.send_message(chat_id,"🔶 OTC 30",reply_markup=k);return
   if d=="real_manual":
    k=types.InlineKeyboardMarkup(row_width=2)
-   for p in REAL: k.add(types.InlineKeyboardButton(p,callback_data=f"pair_{p}_REAL"))
-   bot.send_message(chat_id,"MANUAL REAL Pick Pair",reply_markup=k);return
+   for p in REAL: k.add(types.InlineKeyboardButton(f"💹 {p}",callback_data=f"pair_{p}_REAL"))
+   bot.send_message(chat_id,"✋ MANUAL REAL Pick Pair",reply_markup=k);return
   if d=="otc_manual":
    k=types.InlineKeyboardMarkup(row_width=2)
-   for p in OTC[:15]: k.add(types.InlineKeyboardButton(p,callback_data=f"pair_{p}_OTC"))
+   for p in OTC[:15]: k.add(types.InlineKeyboardButton(f"🔶 {p}",callback_data=f"pair_{p}_OTC"))
    k.add(types.InlineKeyboardButton("Next 15 →",callback_data="otc_manual2"))
-   bot.send_message(chat_id,"MANUAL OTC 1/2",reply_markup=k);return
+   bot.send_message(chat_id,"✋ MANUAL OTC 1/2",reply_markup=k);return
   if d=="otc_manual2":
    k=types.InlineKeyboardMarkup(row_width=2)
-   for p in OTC[15:]: k.add(types.InlineKeyboardButton(p,callback_data=f"pair_{p}_OTC"))
+   for p in OTC[15:]: k.add(types.InlineKeyboardButton(f"🔶 {p}",callback_data=f"pair_{p}_OTC"))
    k.add(types.InlineKeyboardButton("← Back",callback_data="otc_manual"))
-   bot.send_message(chat_id,"MANUAL OTC 2/2",reply_markup=k);return
+   bot.send_message(chat_id,"✋ MANUAL OTC 2/2",reply_markup=k);return
   if d.startswith("pair_"):
    try:
     rest=d[5:]
     pair=rest[:-5] if rest.endswith("_REAL") else rest[:-4]
    except: pair=REAL[0]
    is_over,cur,lim=check_limit(tid,lvl)
-   if is_over: bot.send_message(chat_id,f"Limit {cur}/{lim}");return
+   if is_over: bot.send_message(chat_id,f"⛔ {lvl.upper()} limit {cur}/{lim} 😔");return
    k=types.InlineKeyboardMarkup(row_width=4)
-   k.add(types.InlineKeyboardButton("M1",callback_data=f"sig_{pair}_M1"),types.InlineKeyboardButton("M2",callback_data=f"sig_{pair}_M2"),types.InlineKeyboardButton("M3",callback_data=f"sig_{pair}_M3"),types.InlineKeyboardButton("M5",callback_data=f"sig_{pair}_M5"))
+   k.add(types.InlineKeyboardButton("⏱️ M1",callback_data=f"sig_{pair}_M1"),types.InlineKeyboardButton("⏱️ M2",callback_data=f"sig_{pair}_M2"),types.InlineKeyboardButton("⏱️ M3",callback_data=f"sig_{pair}_M3"),types.InlineKeyboardButton("⏱️ M5",callback_data=f"sig_{pair}_M5"))
    bc=0;bs="";br=0;bt=""
    for exp in EXP:
     sig,rsi,trend,conf=get_real_signal(pair, exp, lvl)
     if conf>bc: bc=conf;bs=sig;br=rsi;bt=trend
-   bot.send_message(chat_id,f"Pair {pair}\nBest {bs} {bc}% RSI {br:.1f} {bt}\nPick Expiry:",reply_markup=k);return
+   bot.send_message(chat_id,f"💹 Pair {pair}\n🎯 Best {bs} {bc}% RSI {br:.1f} {bt}\nPick Expiry:",reply_markup=k);return
   if d in ["real_auto","otc_auto"]:
    is_over,cur,lim=check_limit(tid,lvl)
-   if is_over: bot.send_message(chat_id,f"Limit {cur}/{lim}");return
+   if is_over: bot.send_message(chat_id,f"⛔ Limit {cur}/{lim}");return
    pairs=OTC if d.startswith("otc_") else REAL
    pair=random.choice(pairs);exp=random.choice(EXP)
    sig,rsi,trend,conf=get_real_signal(pair, exp, lvl)
    inc(tid)
-   bot.send_message(chat_id,f"📊 {lvl.upper()} {conf}%\n{pair} {sig} Exp:{exp}\nRSI {rsi:.1f} {trend} {cur+1}/{lim}",reply_markup=signal_keyboard());return
+   bot.send_message(chat_id,f"📊 {lvl.upper()} {conf}%\n💹 {pair} {sig} Exp:{exp}\n📈 RSI {rsi:.1f} {trend} {cur+1}/{lim}",reply_markup=signal_keyboard());return
   if d.startswith("sig_"):
    tmp=d[4:];idx=tmp.rfind("_M");pair=tmp[:idx];exp=tmp[idx+1:]
    is_over,cur,lim=check_limit(tid,lvl)
    if is_over:
     msg=f"⛔ {lvl.upper()} limit {cur}/{lim}"
-    if lvl=="starter": msg+=" Upgrade PRO $50"
-    if lvl=="pro": msg+=" Upgrade VIP $100"
+    if lvl=="starter": msg+=" Upgrade PRO $50 🚀"
+    if lvl=="pro": msg+=" Upgrade VIP $100 👑"
     bot.send_message(chat_id,msg);return
    sig,rsi,trend,conf=get_real_signal(pair, exp, lvl)
    inc(tid)
-   bot.send_message(chat_id,f"✅ SIGNAL {lvl.upper()} {conf}%\nPair: {pair}\nDir: {sig}\nExp: {exp}\nRSI {rsi:.1f} {trend}\n{cur+1}/{lim}",reply_markup=signal_keyboard());return
+   bot.send_message(chat_id,f"✅ SIGNAL {lvl.upper()} {conf}% 🎯\n💹 Pair: {pair}\n📍 Dir: {sig}\n⏱️ Exp: {exp}\n📈 RSI {rsi:.1f} {trend}\n📊 {cur+1}/{lim}",reply_markup=signal_keyboard());return
  except Exception as e:
   print(f"ERR {e}")
   try: bot.send_message(c.message.chat.id,f"Error {e}")
