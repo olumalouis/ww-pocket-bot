@@ -56,13 +56,15 @@ def inc(uid):
 def get_real_signal(pair,exp,lvl):
     rsi=random.uniform(28,72)
     sig="PUT" if rsi>65 else "CALL" if rsi<35 else random.choice(["CALL","PUT"])
-    trend="UP" if "CALL" in sig else "DOWN"
+    trend="UP 📈" if "CALL" in sig else "DOWN 📉"
     conf=random.randint(75,85) if lvl=="vip" else random.randint(65,75) if lvl=="pro" else random.randint(65,70) if lvl=="starter" else random.randint(55,65)
     return sig,rsi,trend,conf
 @app.route("/", methods=["GET","POST"])
+@app.route("/webhook", methods=["GET","POST"])
+@app.route("/bot", methods=["GET","POST"])
 def main_webhook():
     if request.method=="GET":
-        return "OK KAZI V8"
+        return "OK KAZI V8 🔥 EMOJI RUNNING"
     try:
         js=request.get_data().decode("utf-8")
         if not js: return "OK"
@@ -90,7 +92,7 @@ def postback():
     if order.get(lvl,0)>order.get(u.get("level","none"),0): u["level"]=lvl
     if lvl!="none": u["verified"]=True
     d[click_id]=u;save(d)
-    try: bot.send_message(click_id, f"DEPOSIT ${s} Level {u.get('level').upper()}")
+    try: bot.send_message(click_id, f"✅ DEPOSIT CONFIRMED ${s} 💰 Level {u.get('level').upper()} 👑 Verified!")
     except: pass
     return "OK"
 @bot.message_handler(commands=["start"])
@@ -98,28 +100,28 @@ def start_cmd(m):
     uid=str(m.from_user.id)
     u=ensure(uid)
     if u.get("banned"):
-        bot.send_message(m.chat.id,"Banned");return
+        bot.send_message(m.chat.id,"🚫 Banned");return
     lvl=get_lvl(uid)
     if not u.get("verified"):
         k=types.InlineKeyboardMarkup()
-        k.add(types.InlineKeyboardButton("Register",url=LINK+"?click_id="+uid))
-        bot.send_message(m.chat.id,f"Welcome Register {LINK}?click_id={uid}",reply_markup=k)
+        k.add(types.InlineKeyboardButton("📝 Register Now",url=LINK+"?click_id="+uid))
+        bot.send_message(m.chat.id,f"👋 Welcome {m.from_user.first_name}!\n\n🔥 KAZI SIGNALS V8 🔥\n\n👉 Register First:\n{LINK}?click_id={uid}",reply_markup=k)
         return
     k=types.InlineKeyboardMarkup(row_width=2)
-    k.add(types.InlineKeyboardButton("REAL 15",callback_data="m_real"),types.InlineKeyboardButton("OTC 30",callback_data="m_otc"))
-    k.add(types.InlineKeyboardButton("Deposit",callback_data="dep"),types.InlineKeyboardButton("How",callback_data="how"))
-    k.add(types.InlineKeyboardButton("Balance",callback_data="bal"),types.InlineKeyboardButton("Support",callback_data="sup"))
-    k.add(types.InlineKeyboardButton("Upgrade",callback_data="upg"))
+    k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("📊 OTC 30",callback_data="m_otc"))
+    k.add(types.InlineKeyboardButton("💰 Deposit",callback_data="dep"),types.InlineKeyboardButton("❓ How",callback_data="how"))
+    k.add(types.InlineKeyboardButton("💼 Balance",callback_data="bal"),types.InlineKeyboardButton("📞 Support",callback_data="sup"))
+    k.add(types.InlineKeyboardButton("🚀 Upgrade",callback_data="upg"))
     if uid==OWNER and OWNER!="":
-        k.add(types.InlineKeyboardButton("Admin",callback_data="admin"))
-    bot.send_message(m.chat.id,f"Welcome Level {lvl.upper()} Today {u.get('today',0)}",reply_markup=k)
+        k.add(types.InlineKeyboardButton("👑 Admin",callback_data="admin"))
+    bot.send_message(m.chat.id,f"👋 Welcome {m.from_user.first_name}!\n\n👑 Level: {lvl.upper()}\n📊 Today: {u.get('today',0)}\n💹 Wins: {u.get('wins',0)} | Losses: {u.get('losses',0)}\n\n🔥 Ready to Trade?",reply_markup=k)
 @bot.message_handler(commands=["clearme"])
 def clearme(m):
     uid=str(m.from_user.id)
     u=ensure(uid)
     u["today"]=0;u["wins"]=0;u["losses"]=0;u["win_streak"]=0;u["loss_streak"]=0
     db[uid]=u;save(db)
-    bot.send_message(m.chat.id,"Reset done!")@bot.message_handler(func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
+    bot.send_message(m.chat.id,"✅ Reset done! 🔄")@bot.message_handler(func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
 def broadcast_send(m):
     target=broadcast_pending.get(str(m.from_user.id))
     msg_text=m.text or ""
@@ -136,37 +138,37 @@ def broadcast_send(m):
             try: bot.send_message(uid, f"{msg_text}");cnt+=1;time.sleep(0.05)
             except: pass
     del broadcast_pending[str(m.from_user.id)]
-    bot.send_message(m.chat.id,f"Sent {cnt} Target {target}")
+    bot.send_message(m.chat.id,f"✅ Broadcast Sent {cnt} users 🎯 Target {target}")
 @bot.message_handler(commands=["adduser","broadcast","ban","unban"])
 def admin_cmds(m):
     if str(m.from_user.id)!=OWNER: return
     args=m.text.split(" ",1);cmd=args[0].replace("/","").split("@")[0]
     if cmd=="adduser":
         a=m.text.split()
-        if len(a)<3: bot.send_message(m.chat.id,"/adduser ID LEVEL");return
+        if len(a)<3: bot.send_message(m.chat.id,"❌ /adduser ID LEVEL");return
         uid=a[1].strip();lvl=a[2].lower().strip()
         mp={"free":0,"starter":20,"pro":50,"vip":100}
         if lvl not in mp: return
         d=load_db()
         d[uid]={"total":mp[lvl],"level":lvl if lvl!="free" else "none","verified":lvl!="free","today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
         if lvl=="free": d[uid]["level"]="none"
-        save(d);bot.send_message(m.chat.id,f"Added {uid} as {lvl.upper()}");return
+        save(d);bot.send_message(m.chat.id,f"✅ Added {uid} as {lvl.upper()} 👑");return
     if cmd=="broadcast" and len(args)>1:
         cnt=0;d=load_db()
         for uid in list(d.keys()):
             try: bot.send_message(uid,f"{args[1]}");cnt+=1;time.sleep(0.05)
             except: pass
-        bot.send_message(m.chat.id,f"Sent {cnt}")
+        bot.send_message(m.chat.id,f"✅ Sent {cnt} 📢")
     if cmd=="ban" and len(args)>1:
         d=load_db()
-        if args[1].strip() in d: d[args[1].strip()]["banned"]=True;save(d);bot.send_message(m.chat.id,"Banned")
+        if args[1].strip() in d: d[args[1].strip()]["banned"]=True;save(d);bot.send_message(m.chat.id,"🚫 Banned")
     if cmd=="unban" and len(args)>1:
         d=load_db()
-        if args[1].strip() in d: d[args[1].strip()]["banned"]=False;save(d);bot.send_message(m.chat.id,"Unbanned")
+        if args[1].strip() in d: d[args[1].strip()]["banned"]=False;save(d);bot.send_message(m.chat.id,"✅ Unbanned")
 def signal_keyboard():
     k=types.InlineKeyboardMarkup(row_width=2)
-    k.add(types.InlineKeyboardButton("WIN",callback_data="res_win"),types.InlineKeyboardButton("LOSS",callback_data="res_loss"))
-    k.add(types.InlineKeyboardButton("Next Signal",callback_data="sel_market"))
+    k.add(types.InlineKeyboardButton("✅ WIN",callback_data="res_win"),types.InlineKeyboardButton("❌ LOSS",callback_data="res_loss"))
+    k.add(types.InlineKeyboardButton("🔥 Next Signal",callback_data="sel_market"))
     return k
 @bot.callback_query_handler(func=lambda c: True)
 def cb(c):
@@ -179,118 +181,118 @@ def cb(c):
             if d=="res_win":
                 u["wins"]=u.get("wins",0)+1;u["win_streak"]=u.get("win_streak",0)+1;u["loss_streak"]=0
                 db[tid]=u;save(db)
-                bot.send_message(chat_id, f"WIN Recorded Fresh start Wins {u['win_streak']}", reply_markup=signal_keyboard())
+                bot.send_message(chat_id, f"✅ WIN Recorded! 🔥 Fresh start\n🔥 Streak: {u['win_streak']} wins", reply_markup=signal_keyboard())
                 return
             else:
                 u["losses"]=u.get("losses",0)+1;u["loss_streak"]=u.get("loss_streak",0)+1;u["win_streak"]=0
                 db[tid]=u;save(db);ls=u["loss_streak"]
-                if ls>=6: msg=f"Market choppy {ls} losses pause Take break"
-                else: msg=f"Loss {ls} Recovery incoming"
+                if ls>=6: msg=f"⚠️ Market choppy {ls} losses 😴 Pause! Take break ☕"
+                else: msg=f"❌ Loss {ls} 📉 Recovery incoming 💪"
                 bot.send_message(chat_id, msg, reply_markup=signal_keyboard())
                 return
         if d=="admin" and tid==OWNER:
             k=types.InlineKeyboardMarkup(row_width=2)
-            k.add(types.InlineKeyboardButton("Users",callback_data="ad_users"),types.InlineKeyboardButton("Stats",callback_data="ad_stats"))
-            k.add(types.InlineKeyboardButton("Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("Ban",callback_data="ad_ban"))
-            k.add(types.InlineKeyboardButton("Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("Reset",callback_data="ad_reset"))
-            k.add(types.InlineKeyboardButton("Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("WR",callback_data="ad_wr"))
-            bot.send_message(chat_id,f"ADMIN V8 Users {len(load_db())}",reply_markup=k);return
+            k.add(types.InlineKeyboardButton("👥 Users",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
+            k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
+            k.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
+            k.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
+            bot.send_message(chat_id,f"👑 ADMIN V8 👑\n👥 Users {len(load_db())}",reply_markup=k);return
         if tid==OWNER and d.startswith("ad_"):
             if d=="ad_users":
-                txt="Users:\n"
+                txt="👥 Users:\n"
                 for uid,u in list(load_db().items())[:20]: txt+=f"{uid} {u.get('level')} ${u.get('total')}\n"
                 bot.send_message(chat_id,txt);return
             if d=="ad_stats":
                 dd=load_db();tot=sum(u.get('total',0) for u in dd.values());ver=sum(1 for u in dd.values() if u.get('verified'))
-                bot.send_message(chat_id,f"Stats U:{len(dd)} V:{ver} ${tot}");return
+                bot.send_message(chat_id,f"📊 Stats\n👥 U:{len(dd)} ✅ V:{ver} 💰 ${tot}");return
             if d=="ad_wr":
                 dd=load_db();wins=sum(u.get('wins',0) for u in dd.values());losses=sum(u.get('losses',0) for u in dd.values())
-                bot.send_message(chat_id,f"WR Trades {wins+losses}");return
+                bot.send_message(chat_id,f"🏆 WR Global\n✅ {wins} Wins ❌ {losses} Losses");return
             if d=="ad_deps":
-                dd=load_db();txt="Deposits:\n"
+                dd=load_db();txt="💰 Deposits:\n"
                 for uid,u in dd.items():
                     if u.get('total',0)>0: txt+=f"{uid} ${u.get('total')}\n"
                 bot.send_message(chat_id,txt or "None");return
             if d=="ad_reset":
                 dd=load_db()
                 for u in dd.values(): u["today"]=0;u["date"]=str(date.today())
-                save(dd);bot.send_message(chat_id,"Reset Done");return
+                save(dd);bot.send_message(chat_id,"🔄 Reset Done ✅");return
             if d=="ad_broad":
                 kb=types.InlineKeyboardMarkup(row_width=2)
-                kb.add(types.InlineKeyboardButton("ALL",callback_data="broad_ALL"))
-                kb.add(types.InlineKeyboardButton("FREE",callback_data="broad_FREE"))
-                kb.add(types.InlineKeyboardButton("STARTER",callback_data="broad_STARTER"))
-                kb.add(types.InlineKeyboardButton("PRO",callback_data="broad_PRO"))
-                kb.add(types.InlineKeyboardButton("VIP",callback_data="broad_VIP"))
-                kb.add(types.InlineKeyboardButton("ALL VIPs",callback_data="broad_ALLVIP"))
-                bot.send_message(chat_id,"Select target:",reply_markup=kb);return
+                kb.add(types.InlineKeyboardButton("📢 ALL",callback_data="broad_ALL"))
+                kb.add(types.InlineKeyboardButton("🆓 FREE",callback_data="broad_FREE"))
+                kb.add(types.InlineKeyboardButton("⭐ STARTER",callback_data="broad_STARTER"))
+                kb.add(types.InlineKeyboardButton("💎 PRO",callback_data="broad_PRO"))
+                kb.add(types.InlineKeyboardButton("👑 VIP",callback_data="broad_VIP"))
+                kb.add(types.InlineKeyboardButton("💰 ALL VIPs",callback_data="broad_ALLVIP"))
+                bot.send_message(chat_id,"🎯 Select broadcast target:",reply_markup=kb);return
             if d.startswith("broad_"):
                 target=d.replace("broad_","");broadcast_pending[tid]=target
-                bot.send_message(chat_id,f"Target {target} Now SEND message");return
-            if d=="ad_ban": bot.send_message(chat_id,"/ban ID /unban ID");return
+                bot.send_message(chat_id,f"🎯 Target {target} selected ✅\n\n📝 Now SEND your message (text, emojis, link):");return
+            if d=="ad_ban": bot.send_message(chat_id,"🚫 /ban ID /unban ID");return
             if d=="ad_sec":
-                txt="Log:\n"
+                txt="🔒 Log:\n"
                 for s in sec_log[-10:]: txt+=f"{s.get('ip')} {s.get('status')}\n"
                 bot.send_message(chat_id,txt);return
         if d=="dep":
-            k=types.InlineKeyboardMarkup();k.add(types.InlineKeyboardButton("Register + Deposit",url=LINK+"?click_id="+tid))
-            bot.send_message(chat_id,f"DEPOSIT {LINK}?click_id={tid}",reply_markup=k);return
+            k=types.InlineKeyboardMarkup();k.add(types.InlineKeyboardButton("💰 Register + Deposit",url=LINK+"?click_id="+tid))
+            bot.send_message(chat_id,f"💰 DEPOSIT NOW 👇\n{LINK}?click_id={tid}",reply_markup=k);return
         if d=="upg":
             k=types.InlineKeyboardMarkup()
-            k.add(types.InlineKeyboardButton("STARTER $20",url=LINK+"?click_id="+tid))
-            k.add(types.InlineKeyboardButton("PRO $50",url=LINK+"?click_id="+tid))
-            k.add(types.InlineKeyboardButton("VIP $100",url=LINK+"?click_id="+tid))
-            bot.send_message(chat_id,f"DEPOSIT TO UPGRADE Current {lvl.upper()}",reply_markup=k);return
-        if d=="how": bot.send_message(chat_id,"HOW V8 Register Deposit /start");return
+            k.add(types.InlineKeyboardButton("⭐ STARTER $20",url=LINK+"?click_id="+tid))
+            k.add(types.InlineKeyboardButton("💎 PRO $50",url=LINK+"?click_id="+tid))
+            k.add(types.InlineKeyboardButton("👑 VIP $100",url=LINK+"?click_id="+tid))
+            bot.send_message(chat_id,f"🚀 UPGRADE PLAN\nCurrent {lvl.upper()} 👑\nDeposit to upgrade:",reply_markup=k);return
+        if d=="how": bot.send_message(chat_id,"❓ HOW V8\n1️⃣ Register\n2️⃣ Deposit\n3️⃣ /start\n4️⃣ Get signals 🔥");return
         if d=="bal":
             u=ensure(tid)
-            bot.send_message(chat_id,f"STATUS {lvl.upper()} Total ${u.get('total',0)} Today {u.get('today',0)}");return
-        if d=="sup": bot.send_message(chat_id,"Support @YourSupport");return
+            bot.send_message(chat_id,f"💼 STATUS\n👑 {lvl.upper()}\n💰 Total ${u.get('total',0)}\n📊 Today {u.get('today',0)}\n✅ Wins {u.get('wins',0)} ❌ {u.get('losses',0)}");return
+        if d=="sup": bot.send_message(chat_id,"📞 Support @YourSupport");return
         if d=="sel_market":
-            k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("REAL 15",callback_data="m_real"),types.InlineKeyboardButton("OTC 30",callback_data="m_otc"))
-            bot.send_message(chat_id,"Select Market:",reply_markup=k);return
+            k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("📊 OTC 30",callback_data="m_otc"))
+            bot.send_message(chat_id,"🔥 Select Market:",reply_markup=k);return
         if d=="m_real":
-            k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("Manual 15",callback_data="real_manual"),types.InlineKeyboardButton("Auto",callback_data="real_auto"))
-            bot.send_message(chat_id,"REAL 15",reply_markup=k);return
+            k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("✋ Manual 15",callback_data="real_manual"),types.InlineKeyboardButton("🤖 Auto",callback_data="real_auto"))
+            bot.send_message(chat_id,"💹 REAL 15 Market",reply_markup=k);return
         if d=="m_otc":
-            k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("Manual 30",callback_data="otc_manual"),types.InlineKeyboardButton("Auto 30",callback_data="otc_auto"))
-            bot.send_message(chat_id,"OTC 30",reply_markup=k);return
+            k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("✋ Manual 30",callback_data="otc_manual"),types.InlineKeyboardButton("🤖 Auto 30",callback_data="otc_auto"))
+            bot.send_message(chat_id,"📊 OTC 30 Market",reply_markup=k);return
         if d=="real_manual":
             k=types.InlineKeyboardMarkup(row_width=2)
             for p in REAL: k.add(types.InlineKeyboardButton(f"{p}",callback_data=f"pair_{p}_REAL"))
-            bot.send_message(chat_id,"MANUAL REAL Pick Pair",reply_markup=k);return
+            bot.send_message(chat_id,"✋ MANUAL REAL Pick Pair 👇",reply_markup=k);return
         if d=="otc_manual":
             k=types.InlineKeyboardMarkup(row_width=2)
             for p in OTC[:15]: k.add(types.InlineKeyboardButton(f"{p}",callback_data=f"pair_{p}_OTC"))
-            k.add(types.InlineKeyboardButton("Next 15",callback_data="otc_manual2"))
-            bot.send_message(chat_id,"MANUAL OTC 1/2",reply_markup=k);return
+            k.add(types.InlineKeyboardButton("➡️ Next 15",callback_data="otc_manual2"))
+            bot.send_message(chat_id,"✋ MANUAL OTC 1/2 👇",reply_markup=k);return
         if d=="otc_manual2":
             k=types.InlineKeyboardMarkup(row_width=2)
             for p in OTC[15:]: k.add(types.InlineKeyboardButton(f"{p}",callback_data=f"pair_{p}_OTC"))
-            k.add(types.InlineKeyboardButton("Back",callback_data="otc_manual"))
-            bot.send_message(chat_id,"MANUAL OTC 2/2",reply_markup=k);return
+            k.add(types.InlineKeyboardButton("⬅️ Back",callback_data="otc_manual"))
+            bot.send_message(chat_id,"✋ MANUAL OTC 2/2 👇",reply_markup=k);return
         if d.startswith("pair_"):
             rest=d[5:];pair=rest[:-5] if rest.endswith("_REAL") else rest[:-4]
             is_over,cur,lim=check_limit(tid,lvl)
-            if is_over: bot.send_message(chat_id,f"Limit {cur}/{lim}");return
+            if is_over: bot.send_message(chat_id,f"🚫 Limit {cur}/{lim}");return
             k=types.InlineKeyboardMarkup(row_width=4)
             k.add(types.InlineKeyboardButton("M1",callback_data=f"sig_{pair}_M1"),types.InlineKeyboardButton("M2",callback_data=f"sig_{pair}_M2"),types.InlineKeyboardButton("M3",callback_data=f"sig_{pair}_M3"),types.InlineKeyboardButton("M5",callback_data=f"sig_{pair}_M5"))
-            bot.send_message(chat_id,f"Pair {pair} Pick Expiry:",reply_markup=k);return
+            bot.send_message(chat_id,f"💹 Pair {pair}\n⏰ Pick Expiry:",reply_markup=k);return
         if d in ["real_auto","otc_auto"]:
             is_over,cur,lim=check_limit(tid,lvl)
-            if is_over: bot.send_message(chat_id,f"Limit {cur}/{lim}");return
+            if is_over: bot.send_message(chat_id,f"🚫 Limit {cur}/{lim}");return
             pairs=OTC if d.startswith("otc_") else REAL
             pair=random.choice(pairs);exp=random.choice(EXP)
             sig,rsi,trend,conf=get_real_signal(pair, exp, lvl)
             inc(tid)
-            bot.send_message(chat_id,f"{lvl.upper()} {conf}% {pair} {sig} Exp {exp} RSI {rsi:.1f} {cur+1}/{lim}",reply_markup=signal_keyboard());return
+            bot.send_message(chat_id,f"🔥 {lvl.upper()} {conf}% 💹\n📊 {pair}\n{'📈 CALL' if 'CALL' in sig else '📉 PUT'} {sig}\n⏰ Exp {exp}\n📉 RSI {rsi:.1f} {trend}\n📊 {cur+1}/{lim}",reply_markup=signal_keyboard());return
         if d.startswith("sig_"):
             tmp=d[4:];idx=tmp.rfind("_M");pair=tmp[:idx];exp=tmp[idx+1:]
             is_over,cur,lim=check_limit(tid,lvl)
-            if is_over: bot.send_message(chat_id,f"Limit {cur}/{lim}");return
+            if is_over: bot.send_message(chat_id,f"🚫 Limit {cur}/{lim}");return
             sig,rsi,trend,conf=get_real_signal(pair, exp, lvl)
             inc(tid)
-            bot.send_message(chat_id,f"SIGNAL {lvl.upper()} {conf}% Pair {pair} Dir {sig} Exp {exp} RSI {rsi:.1f} {cur+1}/{lim}",reply_markup=signal_keyboard());return
+            bot.send_message(chat_id,f"🔥 SIGNAL {lvl.upper()} {conf}% 💹\n📊 Pair {pair}\n{'📈 CALL' if 'CALL' in sig else '📉 PUT'} Dir {sig}\n⏰ Exp {exp}\n📉 RSI {rsi:.1f} {trend}\n📊 {cur+1}/{lim}",reply_markup=signal_keyboard());return
     except Exception as e:
         print(f"ERR {e}")
 if __name__=="__main__":
