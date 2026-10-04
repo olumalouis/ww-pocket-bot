@@ -81,8 +81,8 @@ def inc(uid):
     save(db)
 def get_real_signal(pair,exp,lvl):
     rsi=random.uniform(28,72)
-    sig="PUT" if rsi>65 else "CALL" if rsi<35 else random.choice(["CALL","PUT"])
-    trend="UP 📈" if "CALL" in sig else "DOWN 📉"
+    sig="SELL" if rsi>65 else "BUY" if rsi<35 else random.choice(["BUY","SELL"])
+    trend="UP 📈" if "BUY" in sig else "DOWN 📉"
     conf=random.randint(75,85) if lvl=="vip" else random.randint(65,75) if lvl=="pro" else random.randint(65,70) if lvl=="starter" else random.randint(55,65)
     return sig,rsi,trend,conf
 @app.route("/", methods=["GET","POST"])
@@ -466,14 +466,14 @@ f"💸 Deposit now = Instant Upgrade!",reply_markup=k);return
             pair=random.choice(pairs);exp=random.choice(EXP)
             sig,rsi,trend,conf=get_real_signal(pair, exp, lvl)
             inc(tid)
-            bot.send_message(chat_id,f"🔥 {lvl.upper()} {conf}% 💹\n📊 {pair}\n{'📈 CALL' if 'CALL' in sig else '📉 PUT'} {sig}\n⏰ Exp {exp}\n📉 RSI {rsi:.1f} {trend}\n📊 {cur+1}/{lim}",reply_markup=signal_keyboard());return
+            bot.send_message(chat_id,f"🔥 {lvl.upper()} {conf}% 💹\n📊 {pair}\n{'📈 BUY' if 'BUY' in sig else '📉 SELL'} {sig}\n⏰ Exp {exp}\n📉 RSI {rsi:.1f} {trend}\n📊 {cur+1}/{lim}",reply_markup=signal_keyboard());return
         if d.startswith("sig_"):
             tmp=d[4:];idx=tmp.rfind("_M");pair=tmp[:idx];exp=tmp[idx+1:]
             is_over,cur,lim=check_limit(tid,lvl)
             if is_over: bot.send_message(chat_id,f"🚫 Limit {cur}/{lim}");return
             sig,rsi,trend,conf=get_real_signal(pair, exp, lvl)
             inc(tid)
-            bot.send_message(chat_id,f"🔥 SIGNAL {lvl.upper()} {conf}% 💹\n📊 Pair {pair}\n{'📈 CALL' if 'CALL' in sig else '📉 PUT'} Dir {sig}\n⏰ Exp {exp}\n📉 RSI {rsi:.1f} {trend}\n📊 {cur+1}/{lim}",reply_markup=signal_keyboard());return
+            bot.send_message(chat_id,f"🔥 SIGNAL {lvl.upper()} {conf}% 💹\n📊 Pair {pair}\n{'📈 BUY' if 'BUY' in sig else '📉 SELL'} Dir {sig}\n⏰ Exp {exp}\n📉 RSI {rsi:.1f} {trend}\n📊 {cur+1}/{lim}",reply_markup=signal_keyboard());return
     except Exception as e:
         print(f"ERR {e}")
 if __name__=="__main__":
