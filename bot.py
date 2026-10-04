@@ -64,7 +64,7 @@ def get_real_signal(pair,exp,lvl):
 @app.route("/bot", methods=["GET","POST"])
 def main_webhook():
     if request.method=="GET":
-        return "OK KAZI V9 🔥 HIDDEN WR"
+        return "OK KAZI V9.4 FINAL 🔥"
     try:
         js=request.get_data().decode("utf-8")
         if not js: return "OK"
@@ -105,12 +105,12 @@ def start_cmd(m):
     if not u.get("verified"):
         k=types.InlineKeyboardMarkup()
         k.add(types.InlineKeyboardButton("📝 Register Now",url=LINK+"?click_id="+uid))
-        bot.send_message(m.chat.id,f"👋 Welcome {m.from_user.first_name}!\n\n🔥 KAZI SIGNALS V9 🔥\n\n👉 Register First:\n{LINK}?click_id={uid}",reply_markup=k)
+        bot.send_message(m.chat.id,f"👋 Welcome {m.from_user.first_name}!\n\n🔥 KAZI SIGNALS V9.4 🔥\n\n👉 Register First:\n{LINK}?click_id={uid}",reply_markup=k)
         return
     k=types.InlineKeyboardMarkup(row_width=2)
-    k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("📊 OTC 30",callback_data="m_otc"))
+    k.add(types.InlineKeyboardButton("🚀 Get Signal 🔥",callback_data="sel_market"))
     k.add(types.InlineKeyboardButton("💰 Deposit",callback_data="dep"),types.InlineKeyboardButton("❓ How",callback_data="how"))
-    k.add(types.InlineKeyboardButton("💼 Balance",callback_data="bal"),types.InlineKeyboardButton("📞 Support",callback_data="sup"))
+    k.add(types.InlineKeyboardButton("👤 Status",callback_data="status"),types.InlineKeyboardButton("📞 Support",callback_data="sup"))
     k.add(types.InlineKeyboardButton("🚀 Upgrade",callback_data="upg"))
     if uid==OWNER and OWNER!="":
         k.add(types.InlineKeyboardButton("👑 Admin",callback_data="admin"))
@@ -194,7 +194,7 @@ def cb(c):
             k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
             k.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
             k.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
-            bot.send_message(chat_id,f"👑 ADMIN V9 👑\n👥 Users {len(load_db())}",reply_markup=k);return
+            bot.send_message(chat_id,f"👑 ADMIN V9.4 👑\n👥 Users {len(load_db())}",reply_markup=k);return
         if tid==OWNER and d.startswith("ad_"):
             if d=="ad_users":
                 txt="👥 Users:\n"
@@ -238,15 +238,41 @@ def cb(c):
             k=types.InlineKeyboardMarkup();k.add(types.InlineKeyboardButton("💰 Register + Deposit",url=LINK+"?click_id="+tid))
             bot.send_message(chat_id,f"💰 DEPOSIT NOW 👇\n{LINK}?click_id={tid}",reply_markup=k);return
         if d=="upg":
+            u=ensure(tid)
+            cur_total=u.get('total',0)
             k=types.InlineKeyboardMarkup()
             k.add(types.InlineKeyboardButton("⭐ STARTER $20",url=LINK+"?click_id="+tid))
-            k.add(types.InlineKeyboardButton("💎 PRO $50",url=LINK+"?click_id="+tid))
-            k.add(types.InlineKeyboardButton("👑 VIP $100",url=LINK+"?click_id="+tid))
-            bot.send_message(chat_id,f"🚀 UPGRADE PLAN\nCurrent {lvl.upper()} 👑\nDeposit to upgrade:",reply_markup=k);return
-        if d=="how": bot.send_message(chat_id,"❓ HOW V9\n1️⃣ Register\n2️⃣ Deposit\n3️⃣ /start\n4️⃣ Get signals 🔥");return
-        if d=="bal":
+            k.add(types.InlineKeyboardButton("💎 PRO $50 - POPULAR 🔥",url=LINK+"?click_id="+tid))
+            k.add(types.InlineKeyboardButton("👑 VIP $100 - BEST WR 85%",url=LINK+"?click_id="+tid))
+            bot.send_message(chat_id,
+f"🚀 UPGRADE PLAN - EARN MORE!\n\n"
+f"👤 Your Status:\n"
+f"👑 Level: {lvl.upper()}\n"
+f"💰 Deposit: ${cur_total}\n"
+f"📊 Today: {u.get('today',0)}/{'♾️' if lvl=='vip' else '20' if lvl=='starter' else '100' if lvl=='pro' else '3'}\n\n"
+f"💎 PLANS COMPARISON:\n"
+f"━━━━━━━━━━━━━━━\n"
+f"🆓 FREE\n"
+f"💵 Deposit $0 | 📊 3/day | 🎯 55-65% WR\n\n"
+f"⭐ STARTER - Deposit $20\n"
+f"💵 Deposit $20 | 📊 20/day | 🎯 65-70% WR\n"
+f"✅ Perfect to start\n\n"
+f"💎 PRO - Deposit $50 🔥 MOST POPULAR\n"
+f"💵 Deposit $50 | 📊 100/day | 🎯 70-75% WR\n"
+f"✅ 5x More Signals + Higher WR\n\n"
+f"👑 VIP - Deposit $100 💰 ULTIMATE\n"
+f"💵 Deposit $100 | 📊 UNLIMITED | 🎯 75-85% WR\n"
+f"✅ ♾️ Signals | 🔥 Best Accuracy\n"
+f"✅ VIP Private Support\n"
+f"✅ Maximum Profit\n"
+f"━━━━━━━━━━━━━━━\n"
+f"⚡️ 90% traders choose PRO or VIP!\n"
+f"💸 Deposit now = Instant Upgrade!",reply_markup=k);return
+        if d=="how": bot.send_message(chat_id,"❓ HOW V9.4\n1️⃣ Register\n2️⃣ Deposit\n3️⃣ /start\n4️⃣ Get Signal → Choose Market 🔥");return
+        if d in ["bal","status"]:
             u=ensure(tid)
-            bot.send_message(chat_id,f"💼 STATUS\n👑 {lvl.upper()}\n💰 Total ${u.get('total',0)}\n📊 Today {u.get('today',0)}");return
+            lim_txt="♾️" if lvl=="vip" else "20" if lvl=="starter" else "100" if lvl=="pro" else "3"
+            bot.send_message(chat_id,f"👤 STATUS\n👑 Level: {lvl.upper()}\n💰 Deposit: ${u.get('total',0)}\n📊 Today: {u.get('today',0)}/{lim_txt}\n🏆 Wins: {u.get('wins',0)} | ❌ Loss: {u.get('losses',0)}");return
         if d=="sup": bot.send_message(chat_id,"📞 Support @YourSupport");return
         if d=="sel_market":
             k=types.InlineKeyboardMarkup(row_width=2);k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("📊 OTC 30",callback_data="m_otc"))
