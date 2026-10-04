@@ -29,7 +29,7 @@ def get_live_closes(pair, limit=100):
             if isinstance(r,list) and len(r)>20:
                 return [float(x[4]) for x in r]
     except: pass
-    return list(np.cumsum(np.random.normal(0,0.00015, limit))+1.085)
+    return list(np.cumsum(np.random.normal(0,0.00015, limit))+1.085))
 def calc_rsi(prices, period=14):
     deltas=np.diff(prices)
     gains=np.where(deltas>0, deltas, 0)
@@ -204,6 +204,31 @@ def broadcast_send(m):
             except: pass
     del broadcast_pending[str(m.from_user.id)]
     bot.send_message(m.chat.id,f"✅ Sent to {cnt} users\nTarget: {target}")
+
+@bot.message_handler(commands=["adduser"])
+def adduser_cmd(m):
+    if str(m.from_user.id)!=OWNER: return
+    args=m.text.split()
+    if len(args)<3:
+        bot.send_message(m.chat.id,"Usage:\n/adduser TELEGRAM_ID LEVEL\nLevels: free starter pro vip\nEx: /adduser 123456789 vip")
+        return
+    uid=args[1].strip()
+    lvl=args[2].lower().strip()
+    total_map={"free":0,"starter":20,"pro":50,"vip":100}
+    if lvl not in total_map:
+        bot.send_message(m.chat.id,"Level must be: free starter pro vip")
+        return
+    tot=total_map[lvl]
+    verified = lvl!="free"
+    db[uid]={"total":tot,"level":lvl if lvl!="free" else "none","verified":verified,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
+    if lvl=="free":
+        db[uid]["level"]="none"
+    if uid==OWNER:
+        db[uid]["level"]="vip"
+        db[uid]["verified"]=True
+    save(db)
+    bot.send_message(m.chat.id,f"✅ Added {uid} as {lvl.upper()} Total ${tot}")
+
 @bot.message_handler(commands=["broadcast","ban","unban"])
 def admin_cmds(m):
  if str(m.from_user.id)!=OWNER: return
