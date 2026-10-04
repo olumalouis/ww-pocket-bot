@@ -90,6 +90,7 @@ def load_block():
 def save_block(d): json.dump(d, open(BLOCK_FILE,"w"), indent=2)
 sec_log=load_sec()
 blocked=load_block()
+broadcast_pending={}
 
 def ensure(tid):
  tid=str(tid);u=db.get(tid)
@@ -191,12 +192,38 @@ def start(m):
  k=types.InlineKeyboardMarkup(row_width=2)
  k.add(types.InlineKeyboardButton("📊 GET SIGNAL",callback_data="sel_market"))
  k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("🔶 OTC 30",callback_data="m_otc"))
- k.add(types.InlineKeyboardButton("✋ Manual Mode",callback_data="mode_manual"),types.InlineKeyboardButton("🤖 Auto Mode",callback_data="mode_auto"))
  k.add(types.InlineKeyboardButton("💎 Upgrade PRO/VIP",callback_data="upg"),types.InlineKeyboardButton("📜 How it Works",callback_data="how"))
  k.add(types.InlineKeyboardButton("💰 Deposit",callback_data="dep"),types.InlineKeyboardButton("📈 My Status",callback_data="bal"))
  k.add(types.InlineKeyboardButton("🔗 Register",url=LINK+"?click_id="+tid),types.InlineKeyboardButton("📞 Support",callback_data="sup"))
  if tid==OWNER: k.add(types.InlineKeyboardButton("👑 ADMIN PANEL",callback_data="admin"))
  bot.send_message(m.chat.id,f"WELCOME V7\nLevel: {lvl.upper()}\nSTARTER 20/day 65-70%\nPRO 100/day 65-75%\nVIP Unlimited 75-85%\nLink: {LINK}?click_id={tid}",reply_markup=k)
+
+@bot.message_handler(func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
+def broadcast_send(m):
+    target=broadcast_pending.get(str(m.from_user.id))
+    msg_text=m.text or m.caption or ""
+    if not msg_text:
+        bot.send_message(m.chat.id,"Send text message please")
+        return
+    cnt=0
+    for uid,u in list(db.items()):
+        lvl = u.get("level","none")
+        is_verified = u.get("verified",False)
+        send=False
+        if target=="ALL": send=True
+        elif target=="FREE" and not is_verified: send=True
+        elif target=="STARTER" and lvl=="starter": send=True
+        elif target=="PRO" and lvl=="pro": send=True
+        elif target=="VIP" and lvl=="vip": send=True
+        elif target=="ALLVIP" and lvl in ["starter","pro","vip"]: send=True
+        if send:
+            try:
+                bot.send_message(uid, f"📢 {msg_text}")
+                cnt+=1
+                time.sleep(0.05)
+            except: pass
+    del broadcast_pending[str(m.from_user.id)]
+    bot.send_message(m.chat.id,f"✅ Sent to {cnt} users\nTarget: {target}")
 
 @bot.message_handler(commands=["broadcast","ban","unban"])
 def admin_cmds(m):
@@ -225,8 +252,6 @@ def cb(c):
   tid=str(c.from_user.id);d=c.data;chat_id=c.message.chat.id;lvl=get_lvl(tid)
   try: bot.delete_message(chat_id,c.message.message_id)
   except: pass
-
-  # === V7 WIN/LOSS LOGIC ===
   if d in ["res_win","res_loss"]:
    u=ensure(tid)
    if not u: return
@@ -250,7 +275,6 @@ def cb(c):
      msg=f"❌ Trade Recorded!\n\n💪 Don't stop - recovery trade incoming\n🎯 Next confidence: {random.randint(82,85)}% (High accuracy)"
     bot.send_message(chat_id, msg, reply_markup=signal_keyboard())
     return
-
   if d=="admin" and tid==OWNER:
    k=types.InlineKeyboardMarkup(row_width=2)
    k.add(types.InlineKeyboardButton("👥 Users",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
@@ -289,7 +313,21 @@ def cb(c):
    if d=="ad_reset":
     for u in db.values(): u["today"]=0;u["date"]=str(date.today())
     save(db);bot.send_message(chat_id,"Reset");return
-   if d=="ad_broad": bot.send_message(chat_id,"/broadcast msg");return
+   if d=="ad_broad":
+    kb=types.InlineKeyboardMarkup(row_width=2)
+    kb.add(types.InlineKeyboardButton("📢 ALL Users",callback_data="broad_ALL"))
+    kb.add(types.InlineKeyboardButton("🆓 FREE Only",callback_data="broad_FREE"))
+    kb.add(types.InlineKeyboardButton("🚀 STARTER Only",callback_data="broad_STARTER"))
+    kb.add(types.InlineKeyboardButton("💎 PRO Only",callback_data="broad_PRO"))
+    kb.add(types.InlineKeyboardButton("👑 VIP Only",callback_data="broad_VIP"))
+    kb.add(types.InlineKeyboardButton("💎 ALL VIPs (Starter+Pro+VIP)",callback_data="broad_ALLVIP"))
+    bot.send_message(chat_id,"Where do you want to send message?\nSelect target:",reply_markup=kb)
+    return
+   if d.startswith("broad_"):
+    target=d.replace("broad_","")
+    broadcast_pending[tid]=target
+    bot.send_message(chat_id,f"✅ Target selected: {target}\n\nNow SEND me the message you want to broadcast to {target}. It can be text + image, just type it.")
+    return
    if d=="ad_ban": bot.send_message(chat_id,"/ban ID /unban ID");return
    if d=="ad_sec":
     txt="Log:\n"
@@ -351,35 +389,4 @@ def cb(c):
    is_over,cur,lim=check_limit(tid,lvl)
    if is_over: bot.send_message(chat_id,f"Limit {cur}/{lim}");return
    k=types.InlineKeyboardMarkup(row_width=4)
-   k.add(types.InlineKeyboardButton("M1",callback_data=f"sig_{pair}_M1"),types.InlineKeyboardButton("M2",callback_data=f"sig_{pair}_M2"),types.InlineKeyboardButton("M3",callback_data=f"sig_{pair}_M3"),types.InlineKeyboardButton("M5",callback_data=f"sig_{pair}_M5"))
-   best_conf=0;best_sig="";best_rsi=0;best_trend=""
-   for exp in EXP:
-    sig,rsi,trend,conf=get_real_signal(pair, exp, lvl)
-    if conf>best_conf: best_conf=conf;best_sig=sig;best_rsi=rsi;best_trend=trend
-   bot.send_message(chat_id,f"Pair {pair}\nBest {best_sig} {best_conf}% RSI {best_rsi:.1f} {best_trend}\nPick Expiry:",reply_markup=k);return
-  if d in ["real_auto","otc_auto"]:
-   is_over,cur,lim=check_limit(tid,lvl)
-   if is_over: bot.send_message(chat_id,f"Limit {cur}/{lim}");return
-   pairs=OTC if d.startswith("otc_") else REAL
-   pair=random.choice(pairs);exp=random.choice(EXP)
-   sig,rsi,trend,conf=get_real_signal(pair, exp, lvl)
-   inc(tid)
-   bot.send_message(chat_id,f"📊 {lvl.upper()} {conf}%\n{pair} {sig} Exp:{exp}\nRSI {rsi:.1f} {trend} {cur+1}/{lim}",reply_markup=signal_keyboard());return
-  if d.startswith("sig_"):
-   tmp=d[4:];idx=tmp.rfind("_M");pair=tmp[:idx];exp=tmp[idx+1:]
-   is_over,cur,lim=check_limit(tid,lvl)
-   if is_over:
-    msg=f"⛔ {lvl.upper()} limit {cur}/{lim}"
-    if lvl=="starter": msg+=" Upgrade PRO $50"
-    if lvl=="pro": msg+=" Upgrade VIP $100"
-    bot.send_message(chat_id,msg);return
-   sig,rsi,trend,conf=get_real_signal(pair, exp, lvl)
-   inc(tid)
-   bot.send_message(chat_id,f"✅ SIGNAL {lvl.upper()} {conf}%\nPair: {pair}\nDir: {sig}\nExp: {exp}\nRSI {rsi:.1f} {trend}\n{cur+1}/{lim}",reply_markup=signal_keyboard());return
- except Exception as e:
-  print(f"ERR {e}")
-  try: bot.send_message(c.message.chat.id,f"Error {e}")
-  except: pass
-
-if __name__=="__main__":
- app.run(host="0.0.0.0", port=int(os.getenv("PORT",8080)))
+   k.add(types.InlineKeyboardButton("M1",callback_data=f"sig_{pair}_M1"),types.InlineKeyboardButton("M2",callback_data=f"sig_{pair}_M2"),types.InlineKeyboardButton("M3",callback_data=f"sig_{pair}_M3"),types.InlineKeyboardButton("M5",callback_data=f"sig_{pair}_
