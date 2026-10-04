@@ -178,18 +178,42 @@ def clearme(m):
     db[uid]=u;save(db)
     bot.send_message(m.chat.id,"✅ Reset done! 🔄")
 
-@bot.message_handler(func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
+@bot.message_handler(content_types=['text','photo','video','document','animation','voice','audio'], func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
 def broadcast_send(m):
     target=broadcast_pending.get(str(m.from_user.id))
-    msg_text=m.text or ""
-    broadcast_content_pending[str(m.from_user.id)] = {"target": target, "text": msg_text}
+    data={"target": target}
+    if m.content_type=="photo":
+        data["type"]="photo"
+        data["file_id"]=m.photo[-1].file_id
+        data["caption"]=m.caption or ""
+        data["text"]=m.caption or ""
+    elif m.content_type=="video":
+        data["type"]="video"
+        data["file_id"]=m.video.file_id
+        data["caption"]=m.caption or ""
+        data["text"]=m.caption or ""
+    elif m.content_type=="document":
+        data["type"]="document"
+        data["file_id"]=m.document.file_id
+        data["caption"]=m.caption or ""
+        data["text"]=m.caption or ""
+    elif m.content_type=="animation":
+        data["type"]="animation"
+        data["file_id"]=m.animation.file_id
+        data["caption"]=m.caption or ""
+        data["text"]=m.caption or ""
+    else:
+        data["type"]="text"
+        data["text"]=m.text or m.caption or ""
+        data["caption"]=m.text or m.caption or ""
+    broadcast_content_pending[str(m.from_user.id)] = data
     del broadcast_pending[str(m.from_user.id)]
     k=types.InlineKeyboardMarkup(row_width=2)
     k.add(types.InlineKeyboardButton("♾️ No Delete",callback_data="del_none"))
     k.add(types.InlineKeyboardButton("🗓️ 1 Week",callback_data="del_7"),types.InlineKeyboardButton("📅 1 Month",callback_data="del_30"))
     k.add(types.InlineKeyboardButton("📆 3 Months",callback_data="del_90"),types.InlineKeyboardButton("🗓️ 6 Months",callback_data="del_180"))
     k.add(types.InlineKeyboardButton("📅 1 Year",callback_data="del_365"))
-    bot.send_message(m.chat.id,f"✅ Message saved!\n🎯 Target: {target}\n\n⏰ Select auto-delete time for broadcast:",reply_markup=k)@bot.message_handler(commands=["adduser","broadcast","ban","unban"])
+    bot.send_message(m.chat.id,f"✅ Message saved! Type: {data['type']}\n🎯 Target: {target}\n\n⏰ Select auto-delete time for broadcast:",reply_markup=k)@bot.message_handler(commands=["adduser","broadcast","ban","unban"])
 def admin_cmds(m):
     if str(m.from_user.id)!=OWNER: return
     args=m.text.split(" ",1);cmd=args[0].replace("/","").split("@")[0]
@@ -315,17 +339,14 @@ def cb(c):
                 txt="🔒 Log:\n"
                 for s in sec_log[-10:]: txt+=f"{s.get('ip')} {s.get('status')}\n"
                 bot.send_message(chat_id,txt);return
-
-        # FIXED - MOVED OUTSIDE ad_ BLOCK
         if tid==OWNER and d.startswith("broad_"):
             target=d.replace("broad_","");broadcast_pending[tid]=target
-            bot.send_message(chat_id,f"🎯 Target {target} selected ✅\n\n📝 Now SEND your message (text, emojis, link):");return
-
+            bot.send_message(chat_id,f"🎯 Target {target} selected ✅\n\n📝 Now SEND your message (photo, video, text, emojis, link):");return
         if tid==OWNER and d.startswith("del_"):
             content = broadcast_content_pending.get(tid)
             if not content:
                 bot.send_message(chat_id,"❌ No broadcast pending");return
-            msg_text=content["text"];target=content["target"]
+            target=content["target"]
             days_str=d.replace("del_","")
             delete_days=None
             if days_str!="none":
@@ -345,7 +366,17 @@ def cb(c):
                 elif target=="ALLVIP" and lvl_u in ["starter","pro","vip"]: send=True
                 if send:
                     try:
-                        sent=bot.send_message(uid, f"{msg_text}")
+                        ctype=content.get("type","text")
+                        if ctype=="photo":
+                            sent=bot.send_photo(uid, content["file_id"], caption=content.get("caption",""))
+                        elif ctype=="video":
+                            sent=bot.send_video(uid, content["file_id"], caption=content.get("caption",""))
+                        elif ctype=="document":
+                            sent=bot.send_document(uid, content["file_id"], caption=content.get("caption",""))
+                        elif ctype=="animation":
+                            sent=bot.send_animation(uid, content["file_id"], caption=content.get("caption",""))
+                        else:
+                            sent=bot.send_message(uid, content.get("text",""))
                         cnt+=1
                         if delete_at:
                             b_list.append({"chat_id": uid, "msg_id": sent.message_id, "delete_at": delete_at.isoformat()})
