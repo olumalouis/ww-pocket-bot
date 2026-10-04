@@ -179,14 +179,42 @@ def cb(c):
         if d in ["res_win","res_loss"]:
             u=ensure(tid)
             if d=="res_win":
-                u["wins"]=u.get("wins",0)+1;u["win_streak"]=u.get("win_streak",0)+1;u["loss_streak"]=0
+                u["wins"]=u.get("wins",0)+1
+                u["win_streak"]=u.get("win_streak",0)+1
+                u["loss_streak"]=0
                 db[tid]=u;save(db)
-                bot.send_message(chat_id, f"✅ WIN Recorded! 🔥", reply_markup=signal_keyboard())
+                msgs=[
+                    f"✅ BOOM! WIN! 🔥💰\n🏆 Streak: {u['win_streak']} Wins!\n🚀 Keep pushing VIP!",
+                    f"✅ PERFECT WIN! 💎🔥\n📈 {u['win_streak']} in a row! You're on fire!",
+                    f"✅ KAZI WIN! 👑💸\n🔥 Win streak {u['win_streak']} - Machine!",
+                    f"✅ BANG! WIN CONFIRMED! 🚀\n💰 {u['win_streak']} Wins straight! Keep going!",
+                ]
+                bot.send_message(chat_id, random.choice(msgs), reply_markup=signal_keyboard())
                 return
             else:
-                u["losses"]=u.get("losses",0)+1;u["loss_streak"]=u.get("loss_streak",0)+1;u["win_streak"]=0
+                u["losses"]=u.get("losses",0)+1
+                u["loss_streak"]=u.get("loss_streak",0)+1
+                u["win_streak"]=0
                 db[tid]=u;save(db)
-                bot.send_message(chat_id, f"❌ Noted! Next will be better 💪", reply_markup=signal_keyboard())
+                ls=u.get("loss_streak",0)
+                if ls>=6:
+                    bot.send_message(chat_id, f"⚠️ WARNING! {ls} LOSS STREAK 🚫\n\n🧠 Boss, STOP trading now!\n📉 Market is bad today, take a break!\n☕️ Rest 1 hour, clear mind!\n🔄 Come back fresh = WIN again!\n\n💡 Pro traders know when to STOP!\n🛑 Paused for your safety!", reply_markup=signal_keyboard())
+                    return
+                if ls==3:
+                    msg=f"❌ 3 Losses in row 😤\n🧠 Don't revenge trade! Take small break\n💪 Next is WIN, trust KAZI!"
+                elif ls==4:
+                    msg=f"❌ 4 Losses 💔\n⚠️ Slow down boss! Reduce lot size\n🔥 We recover together!"
+                elif ls==5:
+                    msg=f"❌ 5 Losses in row! 🚨\n🛑 Almost at limit! 1 more = STOP\n🧘 Breathe, next will recover!"
+                else:
+                    lmsgs=[
+                        f"❌ Loss, but we learn! 📚\n💪 Loss streak {ls} - Next is WIN for sure!",
+                        f"❌ Not today, but we fight! ⚔️\n🔥 {ls} loss - Market trick, we adapt!",
+                        f"❌ Small loss! 💸\n🚀 Top traders lose too, WIN coming!",
+                        f"❌ Oops! Market slipped 📉\n💎 Stay focused, KAZI got next!",
+                    ]
+                    msg=random.choice(lmsgs)
+                bot.send_message(chat_id, msg, reply_markup=signal_keyboard())
                 return
         if d=="admin" and tid==OWNER:
             k=types.InlineKeyboardMarkup(row_width=2)
