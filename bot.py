@@ -155,7 +155,8 @@ def clearme(m):
     uid=str(m.from_user.id)
     u=ensure(uid)
     u["today"]=0;u["wins"]=0;u["losses"]=0;u["win_streak"]=0;u["loss_streak"]=0;save(db)
-    bot.send_message(m.chat.id,"✅ Reset done! Wins/Losses/Limit cleared")@bot.message_handler(func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
+    bot.send_message(m.chat.id,"✅ Reset done! Wins/Losses/Limit cleared")
+    @bot.message_handler(func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
 def broadcast_send(m):
     target=broadcast_pending.get(str(m.from_user.id))
     msg_text=m.text or m.caption or ""
