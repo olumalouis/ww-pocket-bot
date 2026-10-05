@@ -201,7 +201,7 @@ def is_owner_pending(m):
 
 @app.route('/')
 def home():
-    return "Bot Running V12.6 Owner 8188622130 Pocket Auto + Manual"
+    return "Bot Running V12.6.1 Fixed Indent Owner 8188622130"
 
 @app.route('/postback')
 def pocket_postback():
@@ -285,10 +285,9 @@ def start_cmd(m):
         lim_show="20/day 60-70% WR"
     else:
         lim_show="5/day"
-    txt=f"👋 Welcome {name}!\n👑 {lvl.upper()} 📊 Today {u.get('today',0)}/{lim_show}\n🔥 V12.6 Ready? Auto+Manual ON!"
+    txt=f"👋 Welcome {name}!\n👑 {lvl.upper()} 📊 Today {u.get('today',0)}/{lim_show}\n🔥 V12.6.1 Fixed Ready?"
     mm=bot.send_message(chat_id, txt, reply_markup=get_main_kb(uid))
-    store_and_cleanup(chat_id, mm.message_id)
-@bot.message_handler(content_types=["text","photo","video","document","animation"], func=is_owner_pending)
+    store_and_cleanup(chat_id, mm.message_id)@bot.message_handler(content_types=["text","photo","video","document","animation"], func=is_owner_pending)
 def owner_pending_handler(m):
     tid=str(m.from_user.id)
     chat_id=m.chat.id
@@ -320,7 +319,7 @@ def owner_pending_handler(m):
                 d[uid]["expires_at"]="lifetime"
             save(d)
             add_pending.pop(tid,None)
-            mm=bot.send_message(chat_id,f"✅ MANUAL ADD: {uid} as {lvl_clean.upper()} 👑\n💰 ${total_val} - Works with Pocket auto too!")
+            mm=bot.send_message(chat_id,f"✅ MANUAL ADD: {uid} as {lvl_clean.upper()} 👑\n💰 ${total_val}")
             store_and_cleanup(chat_id, mm.message_id)
         except Exception as e:
             add_pending.pop(tid,None)
@@ -379,7 +378,7 @@ def admin_cmds(m):
         if m.reply_to_message and m.reply_to_message.from_user:
             reply_uid=str(m.reply_to_message.from_user.id)
         if len(a)<3 and not reply_uid:
-            mm=bot.send_message(chat_id,"📌 MANUAL ADDUSER V12.6:\n\n/adduser ID LEVEL [DAYS]\nEx: /adduser 123456789 VIP\n/adduser 123,456,789 STARTER 30\nReply: /adduser VIP\n\n💰 POCKET AUTO also works via postback!")
+            mm=bot.send_message(chat_id,"📌 MANUAL ADDUSER V12.6:\n\n/adduser ID LEVEL [DAYS]\nEx: /adduser 123456789 VIP\n/adduser 123,456,789 STARTER 30\nReply: /adduser VIP\n\n💰 POCKET AUTO also works!")
             store_and_cleanup(chat_id, mm.message_id)
             return
         lvl=None
@@ -429,7 +428,7 @@ def admin_cmds(m):
             added.append(uid)
         save(d)
         days_txt=f" for {days} days" if days else " forever"
-        mm=bot.send_message(chat_id,f"✅ MANUAL ADDED {len(added)} as {lvl.upper()}{days_txt} 👑\nIDs: {', '.join(added)}\n💰 Pocket auto still ON for FTD!")
+        mm=bot.send_message(chat_id,f"✅ MANUAL ADDED {len(added)} as {lvl.upper()}{days_txt} 👑\nIDs: {', '.join(added)}\n💰 Pocket auto still ON!")
         store_and_cleanup(chat_id, mm.message_id)
         return
 
@@ -447,17 +446,17 @@ def text_handler(m):
     if txt in ["🚀 Get Signal 🔥","Get Signal","/getsignal"]:
         k=types.InlineKeyboardMarkup(row_width=2)
         k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("📊 OTC 30",callback_data="m_otc"))
-        mm=bot.send_message(chat_id,"🔥 Select Market V12.6 Pocket Auto+Manual:",reply_markup=k)
+        mm=bot.send_message(chat_id,"🔥 Select Market V12.6.1:",reply_markup=k)
         store_and_cleanup(chat_id, mm.message_id)
         return
     if txt in ["💰 Deposit","Deposit"]:
         k=types.InlineKeyboardMarkup()
         k.add(types.InlineKeyboardButton("💰 Deposit",url=LINK+"?click_id="+uid))
-        mm=bot.send_message(chat_id,f"💰 DEPOSIT {LINK}?click_id={uid}\n💡 After deposit, auto upgrade via Pocket postback!",reply_markup=k)
+        mm=bot.send_message(chat_id,f"💰 DEPOSIT {LINK}?click_id={uid}\n💡 After deposit, auto upgrade via Pocket!",reply_markup=k)
         store_and_cleanup(chat_id, mm.message_id)
         return
     if txt in ["❓ How","How"]:
-        mm=bot.send_message(chat_id,"❓ HOW: Register via link with?click_id=YOUR_ID, Deposit, Auto upgrade via Pocket postback + manual /adduser also works!")
+        mm=bot.send_message(chat_id,"❓ HOW: Register via link with?click_id=YOUR_ID, Deposit, Auto upgrade!")
         store_and_cleanup(chat_id, mm.message_id)
         return
     if txt in ["👤 Status","Status"]:
@@ -470,7 +469,7 @@ def text_handler(m):
             lim_txt="20/day 60-70% WR"
         else:
             lim_txt="5/day"
-        mm=bot.send_message(chat_id,f"👤 ID:{uid}\n👑 Level:{lvl.upper()}\n💰 Deposit:${u.get('total',0)}\n📊 Today:{u.get('today',0)}/{lim_txt}\n🏆 W/L: {u.get('today_wins',0)}W-{u.get('today_losses',0)}L Today | {u.get('wins',0)}W-{u.get('losses',0)}L Total\n🔥 Streak: {u.get('win_streak',0)}W {u.get('loss_streak',0)}L\n💰 Pocket Auto+Manual ON!")
+        mm=bot.send_message(chat_id,f"👤 ID:{uid}\n👑 Level:{lvl.upper()}\n💰 Deposit:${u.get('total',0)}\n📊 Today:{u.get('today',0)}/{lim_txt}\n🏆 W/L: {u.get('today_wins',0)}W-{u.get('today_losses',0)}L Today | {u.get('wins',0)}W-{u.get('losses',0)}L Total\n🔥 Streak: {u.get('win_streak',0)}W {u.get('loss_streak',0)}L")
         store_and_cleanup(chat_id, mm.message_id)
         return
     if txt in ["📞 Support","Support"]:
@@ -480,26 +479,13 @@ def text_handler(m):
     if txt in ["🚀 Upgrade","Upgrade"]:
         u=ensure(uid)
         txt_upgrade=f"""🚀 UPGRADE YOUR POWER {lvl.upper()} 👑
-
 Your current: {lvl.upper()} | Deposit: ${u.get('total',0)}
-
 💡 Choose your level:
-
 🆓 FREE - 5 signals/day
-Perfect to test, but limited! 🔓 Every master was once a beginner!
-
-⭐ STARTER - $20 Deposit - 20/day 60-70% WR
-🚀 Best for beginners! Double your chances! Small deposit, big start! You can do it! Start small, dream big!
-
-💎 PRO - $50 Deposit - 100/day 70-85% WR
-🔥 Most Popular! 5x more signals! Higher accuracy! Serious traders choose PRO! You are one step away from success! Level up now, your future self will thank you!
-
-👑 VIP - $100 Deposit - ♾️ Unlimited up to 87% WR
-💰 ULTIMATE POWER! No limits! Max WR 87%! Unlimited signals = Unlimited profit! Top traders are VIP! Become a legend today! Believe in yourself, invest in yourself!
-
-💪 Auto unlock after Pocket deposit! Manual add also available!
-
-👇 Click below to upgrade:
+⭐ STARTER - $20 - 20/day 60-70% WR
+💎 PRO - $50 - 100/day 70-85% WR
+👑 VIP - $100 - ♾️ Unlimited up to 87% WR
+💪 Auto unlock after Pocket deposit!
 """
         k=types.InlineKeyboardMarkup()
         k.add(types.InlineKeyboardButton("⭐ STARTER $20 - 20/day 60-70% WR 🚀",url=LINK+"?click_id="+uid))
@@ -515,10 +501,9 @@ Perfect to test, but limited! 🔓 Every master was once a beginner!
         k2.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
         k2.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
         k2.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
-        mm=bot.send_message(chat_id,f"👑 ADMIN V12.6 👑 Owner {OWNER}\n👥 Users {len(load_db())}\n💰 Pocket Auto+Manual Both ON!\n📊 FREE 5, STARTER 20, PRO 100, VIP ♾️ 87%",reply_markup=k2)
+        mm=bot.send_message(chat_id,f"👑 ADMIN V12.6.1 👑 Owner {OWNER}\n👥 Users {len(load_db())}\n💰 Pocket Auto+Manual Both ON!",reply_markup=k2)
         store_and_cleanup(chat_id, mm.message_id)
-        return
-        @bot.callback_query_handler(func=lambda c: True)
+        return@bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     try:
         bot.answer_callback_query(c.id)
@@ -590,7 +575,7 @@ def cb(c):
             k2.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
             k2.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
             k2.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
-            mm=bot.send_message(chat_id,f"👑 ADMIN V12.6 Owner {OWNER}",reply_markup=k2)
+            mm=bot.send_message(chat_id,f"👑 ADMIN V12.6.1 Owner {OWNER}",reply_markup=k2)
             store_and_cleanup(chat_id, mm.message_id)
             return
         if tid==OWNER and data.startswith("ad_"):
@@ -608,14 +593,14 @@ def cb(c):
                 kb.add(types.InlineKeyboardButton("💎 PRO 100/day 70-85%",callback_data="addlvl_pro"))
                 kb.add(types.InlineKeyboardButton("👑 VIP Unlimited 87%",callback_data="addlvl_vip"))
                 kb.add(types.InlineKeyboardButton("💎 LIFETIME ♾️",callback_data="addlvl_lifetime"))
-                mm=bot.send_message(chat_id,"➕ SELECT LEVEL V12.6:\nFREE 5/day\nSTARTER 20/day 60-70% WR\nPRO 100/day 70-85% WR\nVIP Unlimited 87% WR\n\nBoth Auto (Pocket) + Manual works!",reply_markup=kb)
+                mm=bot.send_message(chat_id,"➕ SELECT LEVEL V12.6.1:\nFREE 5/day\nSTARTER 20/day 60-70% WR\nPRO 100/day 70-85% WR\nVIP Unlimited 87% WR",reply_markup=kb)
                 store_and_cleanup(chat_id, mm.message_id)
                 return
             if data=="ad_stats":
                 dd=load_db()
                 tot=sum(u.get('total',0) for u in dd.values())
                 ver=sum(1 for u in dd.values() if u.get('verified'))
-                mm=bot.send_message(chat_id,f"📊 U:{len(dd)} V:{ver} ${tot}\nOwner {OWNER}\nLimits: FREE 5, STARTER 20, PRO 100, VIP ♾️\n💰 Pocket Auto+Manual")
+                mm=bot.send_message(chat_id,f"📊 U:{len(dd)} V:{ver} ${tot}\nOwner {OWNER}")
                 store_and_cleanup(chat_id, mm.message_id)
                 return
             if data=="ad_wr":
@@ -624,7 +609,7 @@ def cb(c):
                 losses=adm.get('total_losses',0)
                 total=wins+losses
                 wr=round(wins/total*100,1) if total>0 else 0
-                mm=bot.send_message(chat_id,f"🏆 WR ✅ {wins} ❌ {losses} {wr}%\nFREE 55-65% | STARTER 60-70% | PRO 70-85% | VIP 80-87%")
+                mm=bot.send_message(chat_id,f"🏆 WR ✅ {wins} ❌ {losses} {wr}%")
                 store_and_cleanup(chat_id, mm.message_id)
                 return
             if data=="ad_deps":
@@ -673,7 +658,7 @@ def cb(c):
         if tid==OWNER and data.startswith("addlvl_"):
             level=data.replace("addlvl_","")
             add_pending[tid]=level
-            mm=bot.send_message(chat_id,f"✅ Level {level.upper()} selected!\nSEND User ID: 8188622130 etc\n/cancel to exit\n💡 Auto Pocket also works parallel!")
+            mm=bot.send_message(chat_id,f"✅ Level {level.upper()} selected!\nSEND User ID:\n/cancel to exit")
             store_and_cleanup(chat_id, mm.message_id)
             return
         if tid==OWNER and data.startswith("broad_"):
@@ -795,7 +780,7 @@ def cb(c):
             pair=rest[:-5] if rest.endswith("_REAL") else rest[:-4]
             is_over,cur,lim=check_limit(tid,lvl)
             if is_over:
-                mm=bot.send_message(chat_id,f"🚫 Limit {cur}/{lim} reached! 💎 Upgrade for more! FREE 5, STARTER 20, PRO 100, VIP ♾️")
+                mm=bot.send_message(chat_id,f"🚫 Limit {cur}/{lim} reached! 💎 Upgrade for more!")
                 store_and_cleanup(chat_id, mm.message_id)
                 return
             k=types.InlineKeyboardMarkup(row_width=4)
@@ -806,7 +791,7 @@ def cb(c):
         if data in ["real_auto","otc_auto"]:
             is_over,cur,lim=check_limit(tid,lvl)
             if is_over:
-                mm=bot.send_message(chat_id,f"🚫 Limit {cur}/{lim} reached! Upgrade for more signals!")
+                mm=bot.send_message(chat_id,f"🚫 Limit {cur}/{lim} reached! Upgrade!")
                 store_and_cleanup(chat_id, mm.message_id)
                 return
             pairs=OTC if data.startswith("otc_") else REAL
@@ -824,7 +809,7 @@ def cb(c):
             exp=tmp[idx+1:]
             is_over,cur,lim=check_limit(tid,lvl)
             if is_over:
-                mm=bot.send_message(chat_id,f"🚫 Limit {cur}/{lim} reached! 💎 Upgrade: FREE 5, STARTER 20/day, PRO 100/day, VIP ♾️ up to 87% WR")
+                mm=bot.send_message(chat_id,f"🚫 Limit {cur}/{lim} reached! 💎 Upgrade: FREE 5, STARTER 20, PRO 100, VIP ♾️ 87% WR")
                 store_and_cleanup(chat_id, mm.message_id)
                 return
             sig,rsi,trend,conf=get_sig(pair, exp, lvl)
@@ -871,4 +856,3 @@ if __name__=="__main__":
     threading.Thread(target=run_bot, daemon=True).start()
     threading.Thread(target=auto_delete_worker, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT",8080)))
-    
