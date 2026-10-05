@@ -17,7 +17,7 @@ app=Flask(__name__)
 if not os.path.exists(DB):
     with open(DB,"w") as f: json.dump({},f)
 if not os.path.exists(ADMIN_DB):
-    with open(DB,"w") as f: json.dump({"total_wins":0,"total_losses":0},f)
+    with open(ADMIN_DB,"w") as f: json.dump({"total_wins":0,"total_losses":0},f)
 if not os.path.exists(BROADCAST_DB):
     with open(BROADCAST_DB,"w") as f: json.dump([],f)
 def load_db():
@@ -179,77 +179,58 @@ def clearme(m):
     db[uid]=u;save(db)
     bot.send_message(m.chat.id,"✅ Reset done! 🔄")
 
-@bot.message_handler(content_types=['text','photo','video','document','animation','voice','audio'], func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in broadcast_pending)
-def broadcast_send(m):
-    target=broadcast_pending.get(str(m.from_user.id))
-    data={"target": target}
-    if m.content_type=="photo":
-        data["type"]="photo"
-        data["file_id"]=m.photo[-1].file_id
-        data["caption"]=m.caption or ""
-        data["text"]=m.caption or ""
-    elif m.content_type=="video":
-        data["type"]="video"
-        data["file_id"]=m.video.file_id
-        data["caption"]=m.caption or ""
-        data["text"]=m.caption or ""
-    elif m.content_type=="document":
-        data["type"]="document"
-        data["file_id"]=m.document.file_id
-        data["caption"]=m.caption or ""
-        data["text"]=m.caption or ""
-    elif m.content_type=="animation":
-        data["type"]="animation"
-        data["file_id"]=m.animation.file_id
-        data["caption"]=m.caption or ""
-        data["text"]=m.caption or ""
-    else:
-        data["type"]="text"
-        data["text"]=m.text or m.caption or ""
-        data["caption"]=m.text or m.caption or ""
-    broadcast_content_pending[str(m.from_user.id)] = data
-    del broadcast_pending[str(m.from_user.id)]
-    k=types.InlineKeyboardMarkup(row_width=2)
-    k.add(types.InlineKeyboardButton("♾️ No Delete",callback_data="del_none"))
-    k.add(types.InlineKeyboardButton("🗓️ 1 Week",callback_data="del_7"),types.InlineKeyboardButton("📅 1 Month",callback_data="del_30"))
-    k.add(types.InlineKeyboardButton("📆 3 Months",callback_data="del_90"),types.InlineKeyboardButton("🗓️ 6 Months",callback_data="del_180"))
-    k.add(types.InlineKeyboardButton("📅 1 Year",callback_data="del_365"))
-    bot.send_message(m.chat.id,f"✅ Message saved! Type: {data['type']}\n🎯 Target: {target}\n\n⏰ Select auto-delete time for broadcast:",reply_markup=k)
-
-@bot.message_handler(content_types=['text'], func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in adduser_pending)
-def adduser_finish(m):
-    try:
-        level = adduser_pending.get(str(m.from_user.id))
-        uid_input = m.text.strip().replace("@","").split()[0]
-        uid = uid_input
-        d=load_db()
-        mp={"free":0,"starter":20,"pro":50,"vip":100,"lifetime":1000}
-        exp_days=None
-        lvl_clean = level.lower()
-        if "_" in lvl_clean:
-            parts=lvl_clean.split("_")
-            lvl_clean=parts[0]
-            try: exp_days=int(parts[1])
-            except: exp_days=None
-        if lvl_clean not in mp:
-            bot.send_message(m.chat.id,"❌ Invalid level")
-            del adduser_pending[str(m.from_user.id)]
-            return
-        total_val=mp[lvl_clean]
-        final_level = "none" if lvl_clean=="free" else ("vip" if lvl_clean=="lifetime" else lvl_clean)
-        verified = lvl_clean!="free"
-        d[uid]={"total":total_val,"level":final_level,"verified":verified,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
-        if lvl_clean=="free":
-            d[uid]["level"]="none"
-        if exp_days:
-            d[uid]["expires_at"]=(datetime.now()+timedelta(days=exp_days)).isoformat()
-        elif lvl_clean=="lifetime":
-            d[uid]["expires_at"]="lifetime"
-        save(d)
-        del adduser_pending[str(m.from_user.id)]
-        bot.send_message(m.chat.id,f"✅ Added {uid} as {lvl_clean.upper()} 👑 Level={final_level.upper()}")
-    except Exception as e:
-        bot.send_message(m.chat.id,f"❌ Error: {e}")@bot.message_handler(commands=["adduser","broadcast","ban","unban"])
+@bot.message_handler(content_types=['text','photo','video','document','animation','voice','audio'], func=lambda m: str(m.from_user.id)==OWNER and (str(m.from_user.id) in broadcast_pending or str(m.from_user.id) in adduser_pending))
+def owner_pending_handler(m):
+    tid=str(m.from_user.id)
+    if tid in adduser_pending:
+        try:
+            level = adduser_pending.get(tid)
+            txt = m.text or ""
+            uid_input = txt.strip().replace("@","").split()[0] if txt else ""
+            if not uid_input.isdigit():
+                bot.send_message(m.chat.id,"❌ Send NUMERIC ID only!\nEx: 7123456789")
+                return
+            uid = uid_input
+            d=load_db()
+            mp={"free":0,"starter":20,"pro":50,"vip":100,"lifetime":1000}
+            lvl_clean = level.lower()
+            if "_" in lvl_clean:
+                lvl_clean=lvl_clean.split("_")[0]
+            if lvl_clean not in mp:
+                bot.send_message(m.chat.id,"❌ Invalid level"); del adduser_pending[tid]; return
+            total_val=mp[lvl_clean]
+            final_level = "none" if lvl_clean=="free" else ("vip" if lvl_clean=="lifetime" else lvl_clean)
+            verified = lvl_clean!="free"
+            d[uid]={"total":total_val,"level":final_level,"verified":verified,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
+            if lvl_clean=="free": d[uid]["level"]="none"
+            if lvl_clean=="lifetime": d[uid]["expires_at"]="lifetime"
+            save(d); del adduser_pending[tid]
+            bot.send_message(m.chat.id,f"✅ Added {uid} as {lvl_clean.upper()} 👑 Level={final_level.upper()}")
+        except Exception as e:
+            bot.send_message(m.chat.id,f"❌ Error: {e}")
+        return
+    if tid in broadcast_pending:
+        target=broadcast_pending.get(tid)
+        data={"target": target}
+        if m.content_type=="photo":
+            data["type"]="photo"; data["file_id"]=m.photo[-1].file_id; data["caption"]=m.caption or ""; data["text"]=m.caption or ""
+        elif m.content_type=="video":
+            data["type"]="video"; data["file_id"]=m.video.file_id; data["caption"]=m.caption or ""; data["text"]=m.caption or ""
+        elif m.content_type=="document":
+            data["type"]="document"; data["file_id"]=m.document.file_id; data["caption"]=m.caption or ""; data["text"]=m.caption or ""
+        elif m.content_type=="animation":
+            data["type"]="animation"; data["file_id"]=m.animation.file_id; data["caption"]=m.caption or ""; data["text"]=m.caption or ""
+        else:
+            data["type"]="text"; data["text"]=m.text or m.caption or ""; data["caption"]=m.text or m.caption or ""
+        broadcast_content_pending[tid]=data
+        del broadcast_pending[tid]
+        k=types.InlineKeyboardMarkup(row_width=2)
+        k.add(types.InlineKeyboardButton("♾️ No Delete",callback_data="del_none"))
+        k.add(types.InlineKeyboardButton("🗓️ 1 Week",callback_data="del_7"),types.InlineKeyboardButton("📅 1 Month",callback_data="del_30"))
+        k.add(types.InlineKeyboardButton("📆 3 Months",callback_data="del_90"),types.InlineKeyboardButton("🗓️ 6 Months",callback_data="del_180"))
+        k.add(types.InlineKeyboardButton("📅 1 Year",callback_data="del_365"))
+        bot.send_message(m.chat.id,f"✅ Message saved! Type: {data['type']}\n🎯 Target: {target}\n\n⏰ Select auto-delete time for broadcast:",reply_markup=k)
+        return@bot.message_handler(commands=["adduser","broadcast","ban","unban"])
 def admin_cmds(m):
     if str(m.from_user.id)!=OWNER: return
     args=m.text.split(" ",1);cmd=args[0].replace("/","").split("@")[0]
@@ -298,8 +279,11 @@ def signal_keyboard():
 def cb(c):
     try:
         tid=str(c.from_user.id);d=c.data;chat_id=c.message.chat.id;lvl=get_lvl(tid)
-        try: bot.delete_message(chat_id,c.message.message_id)
-        except: pass
+        # FIXED: Don't delete menu instantly for broadcast flow - causes disappearing bug
+        if not (d.startswith("del_") or d.startswith("broad_") or d.startswith("addlvl_")):
+            try: bot.delete_message(chat_id,c.message.message_id)
+            except: pass
+
         if d in ["res_win","res_loss"]:
             u=ensure(tid)
             adm=load_admin()
@@ -402,24 +386,30 @@ def cb(c):
             level=d.replace("addlvl_","")
             adduser_pending[tid]=level
             bot.send_message(chat_id,f"✅ Level {level.upper()} selected!\n\n📝 Now SEND the User ID\nExample: 7123456789\n\nHe will be added as {level.upper()} instantly!")
+            try: bot.delete_message(chat_id,c.message.message_id)
+            except: pass
             return
         if tid==OWNER and d.startswith("broad_"):
             target=d.replace("broad_","");broadcast_pending[tid]=target
-            bot.send_message(chat_id,f"🎯 Target {target} selected ✅\n\n📝 Now SEND your message (photo, video, text, emojis, link):");return
+            bot.send_message(chat_id,f"🎯 Target {target} selected ✅\n\n📝 Now SEND your message (photo, video, text, emojis, link):")
+            try: bot.delete_message(chat_id,c.message.message_id)
+            except: pass
+            return
         if tid==OWNER and d.startswith("del_"):
             content = broadcast_content_pending.get(tid)
             if not content:
-                bot.send_message(chat_id,"❌ No broadcast pending");return
+                bot.send_message(chat_id,"❌ No broadcast pending - send message again");return
             target=content["target"]
             days_str=d.replace("del_","")
             delete_days=None
             if days_str!="none":
-                delete_days=int(days_str)
-            cnt=0;dbs=load_db()
-            b_list=load_broadcast()
+                try: delete_days=int(days_str)
+                except: delete_days=None
+            cnt=0;dbs=load_db(); b_list=load_broadcast()
             delete_at=None
             if delete_days:
                 delete_at = datetime.now() + timedelta(days=delete_days)
+            # SEND FIRST
             for uid,u in list(dbs.items()):
                 lvl_u=u.get("level","none");ver=u.get("verified",False);send=False
                 if target=="ALL": send=True
@@ -440,18 +430,25 @@ def cb(c):
                         elif ctype=="animation":
                             sent=bot.send_animation(uid, content["file_id"], caption=content.get("caption",""))
                         else:
-                            sent=bot.send_message(uid, content.get("text",""))
+                            txt=content.get("text","")
+                            if not txt: continue
+                            sent=bot.send_message(uid, txt)
                         cnt+=1
                         if delete_at:
                             b_list.append({"chat_id": uid, "msg_id": sent.message_id, "delete_at": delete_at.isoformat()})
                         time.sleep(0.05)
-                    except: pass
+                    except Exception as e:
+                        print(f"BROADCAST ERR {uid} {e}")
+                        continue
             if delete_at:
                 save_broadcast(b_list)
                 bot.send_message(chat_id,f"✅ Broadcast Sent {cnt} users 🎯 Target {target}\n⏰ Auto-delete in {delete_days} days!")
             else:
                 bot.send_message(chat_id,f"✅ Broadcast Sent {cnt} users 🎯 Target {target}\n♾️ No auto-delete")
-            del broadcast_content_pending[tid]
+            if tid in broadcast_content_pending:
+                del broadcast_content_pending[tid]
+            try: bot.delete_message(chat_id,c.message.message_id)
+            except: pass
             return
         if d=="dep":
             k=types.InlineKeyboardMarkup();k.add(types.InlineKeyboardButton("💰 Register + Deposit",url=LINK+"?click_id="+tid))
