@@ -280,7 +280,7 @@ def text_buttons(m):
         losses=users[uid].get('losses',0)
         msg=bot.send_message(m.chat.id, f"📈 MY STATUS - DAILY RESET 00:00 UTC\n\n🏆 DAILY W/L:\n✅ Wins Today: {wins}\n❌ Losses Today: {losses}\n\n⏰ Resets daily at 00:00 UTC", reply_markup=main_menu())
         track_msg(m.chat.id, msg)
-    elif "UPGRADE" in txt_up or "UPGRADE" in txt_up:
+    elif "UPGRADE" in txt_up:
         link = f"{AFFILIATE_LINK}?subid={uid}"
         level=get_level(uid)
         markup=types.InlineKeyboardMarkup()
@@ -294,8 +294,7 @@ def text_buttons(m):
             markup.add(types.InlineKeyboardButton("💎 VIP $100 UNLIMITED 80-87% 👑 BEST", url=link))
             upgrade_text=f"🚀 {m.from_user.first_name}, YOU'RE LEAVING MONEY ON TABLE! 💸\n\n🔥 CURRENT: {level} - LIMITED SIGNALS!\n\n💰 UPGRADE & DOMINATE MARKET:\n⚪ NONE $0 - 5/day 55-65%\n🟢 STARTER $20 - 20/day 65-70%\n🔵 PRO $50 - 100/day 70-80% MOST POPULAR!\n💎 VIP $100 UNLIMITED 80-87%\n\n🔗 {link}\n⏰ UPGRADE TODAY!"
         msg=bot.send_message(m.chat.id, upgrade_text, reply_markup=markup)
-        track_msg(m.chat.id, msg)
-    elif "DEPOSIT" in txt_up:
+        track_msg(m.chat.id, msg)    elif "DEPOSIT" in txt_up:
         link = f"{AFFILIATE_LINK}?subid={uid}"
         markup=types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("💰 Deposit Now", url=link))
@@ -383,7 +382,8 @@ def callbacks(c):
         markup=types.InlineKeyboardMarkup(row_width=2)
         markup.add(types.InlineKeyboardButton("✅ REAL 15", callback_data="real_15"), types.InlineKeyboardButton("🔶 OTC 30", callback_data="otc_30"))
         msg=bot.send_message(chat_id, "🔥 Select Market:", reply_markup=markup)
-        track_msg(chat_id, msg)    elif data=="win":
+        track_msg(chat_id, msg)
+    elif data=="win":
         users[uid]["wins"]=users[uid].get("wins",0)+1
         users[uid]["gwr_wins"]=users[uid].get("gwr_wins",0)+1
         users[uid]["streak"]=users[uid].get("streak",0)+1
@@ -402,8 +402,7 @@ def callbacks(c):
             words=random.sample(MOTIV_WORDS, 3)
             txt=f"💔 LOSS {ls}/5 — {words[0]} • {words[1]} • {words[2]}\n\n🔥 One loss doesn't define you! Next is WIN!\n📊 Daily W:{users[uid]['wins']} L:{users[uid]['losses']}"
         msg=bot.send_message(chat_id, txt, reply_markup=main_menu())
-        track_msg(chat_id, msg)
-    elif data=="admin_users":
+        track_msg(chat_id, msg)    elif data=="admin_users":
         admin_cmd(c.message, True)
     elif data=="admin_stats":
         admin_cmd(c.message, True, True)
@@ -490,6 +489,8 @@ def send_signal_result(chat_id, uid, pair, exp, typ):
         return
     users[uid]["used"]+=1
     direction, strength, rsi_label, ema_label=get_signal_with_indicators()
+    left=users[uid]["limit"]-users[uid]["used"]
+    left_str=f"{left}" if lvl!="VIP" else "∞"
     used_str=f"{users[uid]['used']}"
     total_str=f"{users[uid]['limit']}" if lvl!="VIP" else "∞"
     vip_emoji="💎 VIP" if lvl=="VIP" else f"🔥 {lvl}"
@@ -497,7 +498,15 @@ def send_signal_result(chat_id, uid, pair, exp, typ):
     markup=types.InlineKeyboardMarkup(row_width=2)
     markup.add(types.InlineKeyboardButton("✅ WIN", callback_data="win"), types.InlineKeyboardButton("❌ LOSS", callback_data="loss"))
     markup.add(types.InlineKeyboardButton("🔥 Next Signal", callback_data="next_signal"))
-    text=(f"🔥 {vip_emoji} {market_icon}\n📊 {pair}\n📈 {direction} - {strength}\n⏰ Exp {exp}\n📉 {rsi_label}\n📊 {ema_label}\n📊 {used_str}/{total_str} Today")
+    text=(
+f"🔥 {vip_emoji} {market_icon}\n"
+f"📊 {pair}\n"
+f"📈 {direction} - {strength}\n"
+f"⏰ Exp {exp}\n"
+f"📉 {rsi_label}\n"
+f"📊 {ema_label}\n"
+f"📊 {used_str}/{total_str} Today"
+    )
     msg=bot.send_message(chat_id, text, reply_markup=markup)
     track_msg(chat_id, msg)
 
@@ -637,7 +646,7 @@ def admin_commands(m):
     admin_cmd(m)
 
 def run_bot():
-    print("Bot V13.2.9 FINAL - OWNER 8188622130")
+    print("Bot V13.2.9 FINAL - OWNER 8188622130 - REAL 15 OTC 30 - 2 INDICATORS - BUY/SELL")
     bot.infinity_polling()
 
 if __name__ == "__main__":
