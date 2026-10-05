@@ -1,187 +1,184 @@
-import os, json, random, time, hashlib, hmac, telebot, threading
+import os, json, random, time, threading
+from datetime import datetime, date, timedelta
+from flask import Flask
+import telebot
 from telebot import types
-from datetime import date, datetime, timedelta
-from flask import Flask, request, abort
-TOKEN=os.getenv("BOT_TOKEN","").strip()
-LINK=os.getenv("LINK","https://poafficl.com/click")
-SECRET=os.getenv("SECRET","kazi_secret")
-OWNER=str(os.getenv("OWNER_ID","")).strip()
-DB="/tmp/db.json"
-ADMIN_DB="/tmp/admin_stats.json"
-BROADCAST_DB="/tmp/broadcast.json"
-REAL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/GBP","EUR/JPY","GBP/JPY","EUR/AUD","USD/CHF","NZD/USD","EUR/CAD","GBP/CAD","AUD/JPY","GBP/AUD"]
-OTC=["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","AUD/USD OTC","EUR/GBP OTC","USD/CAD OTC","EUR/JPY OTC","GBP/JPY OTC","AUD/JPY OTC","EUR/AUD OTC","USD/CHF OTC","NZD/USD OTC","EUR/CAD OTC","GBP/CAD OTC","AUD/CAD OTC","GBP/AUD OTC","EUR/NZD OTC","AUD/NZD OTC","CHF/JPY OTC","EUR/CHF OTC","GBP/CHF OTC","AUD/CHF OTC","NZD/JPY OTC","CAD/JPY OTC","CAD/CHF OTC","USD/BRL OTC","USD/INR OTC","USD/TRY OTC","USD/ZAR OTC","USD/MXN OTC"]
-EXP=["M1","M2","M3","M5"]
-bot=telebot.TeleBot(TOKEN, threaded=False)
+
+TOKEN=os.getenv("TOKEN","YOUR_TOKEN")
+OWNER=str(os.getenv("OWNER_ID","7133772812"))
+LINK=os.getenv("LINK","https://yourlink.com")
+DB_FILE="db.json"
+ADMIN_FILE="admin.json"
+BROAD_FILE="broadcast.json"
+
+bot=telebot.TeleBot(TOKEN, threaded=True)
 app=Flask(__name__)
-for p,dv in [(DB,{}),(ADMIN_DB,{"total_wins":0,"total_losses":0}),(BROADCAST_DB,[])]:
-    if not os.path.exists(p):
-        with open(p,"w") as f: json.dump(dv,f)
+
+REAL=["EURUSD","GBPUSD","USDJPY","AUDUSD","EURGBP","USDCAD","GBPJPY","EURJPY"]
+OTC=["EURUSD_OTC","GBPUSD_OTC","USDJPY_OTC","AUDUSD_OTC","EURGBP_OTC","GBPJPY_OTC","EURJPY_OTC","AUDJPY_OTC","NZDUSD_OTC","USDCAD_OTC","EURCHF_OTC","GBPCHF_OTC","CHFJPY_OTC","EURCAD_OTC","AUDCAD_OTC","CADJPY_OTC","GBPAUD_OTC","EURAUD_OTC","AUDCHF_OTC","GBP CAD_OTC"]
+EXP=["M1","M2","M3","M5"]
+
+msg_hist={}; broadcast_data={}; add_pending={}
+
 def load_db():
     try:
-        with open(DB,"r") as f: return json.load(f)
-    except: return {}
+        if os.path.exists(DB_FILE):
+            with open(DB_FILE,"r") as f: return json.load(f)
+    except: pass
+    return {}
 def save(d):
-    with open(DB,"w") as f: json.dump(d,f)
+    try:
+        with open(DB_FILE,"w") as f: json.dump(d,f)
+    except: pass
 def load_admin():
     try:
-        with open(ADMIN_DB,"r") as f: return json.load(f)
-    except: return {"total_wins":0,"total_losses":0}
+        if os.path.exists(ADMIN_FILE):
+            with open(ADMIN_FILE,"r") as f: return json.load(f)
+    except: pass
+    return {"total_wins":0,"total_losses":0}
 def save_admin(d):
-    with open(ADMIN_DB,"w") as f: json.dump(d,f)
+    try:
+        with open(ADMIN_FILE,"w") as f: json.dump(d,f)
+    except: pass
 def load_broadcast():
     try:
-        with open(BROADCAST_DB,"r") as f: return json.load(f)
-    except: return []
-def save_broadcast(d):
-    with open(BROADCAST_DB,"w") as f: json.dump(d,f)
-
-broadcast_data={}
-add_pending={}
-msg_hist={} # chat_id -> list of bot msg ids to auto-delete
-
-def cleanup_old_messages(chat_id, keep_id=None):
-    """Delete all previous bot messages, keep only latest and broadcast scheduled"""
-    try:
-        if chat_id not in msg_hist: return
-        # Don't delete broadcast scheduled messages
-        b_list=load_broadcast()
-        protected_ids=set([b["msg_id"] for b in b_list if b["chat_id"]==chat_id])
-        for mid in msg_hist[chat_id][:]: # copy
-            if mid==keep_id: continue
-            if mid in protected_ids: continue
-            try:
-                bot.delete_message(chat_id, mid)
-                time.sleep(0.03)
-            except: pass
-        # Keep only the latest one
-        if keep_id:
-            msg_hist[chat_id]=[keep_id]
-        else:
-            msg_hist[chat_id]=[]
+        if os.path.exists(BROAD_FILE):
+            with open(BROAD_FILE,"r") as f: return json.load(f)
     except: pass
+    return []
+def save_broadcast(d):
+    try:
+        with open(BROAD_FILE,"w") as f: json.dump(d,f)
+    except: pass
+
+def ensure(uid):
+    d=load_db()
+    if uid not in d:
+        d[uid]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
+        save(d)
+    return d[uid]
+
+def get_lvl(uid):
+    d=load_db();u=d.get(uid)
+    if not u: return "none"
+    if u.get("expires_at") and u["expires_at"]!="lifetime":
+        try:
+            exp=datetime.fromisoformat(u["expires_at"])
+            if datetime.now()>exp: u["level"]="none";u["verified"]=False;d[uid]=u;save(d);return "none"
+        except: pass
+    return u.get("level","none")
+
+def check_limit(uid,lvl):
+    d=load_db();u=d.get(uid,{});today=str(date.today())
+    if u.get("date")!=today: u["today"]=0;u["date"]=today;d[uid]=u;save(d)
+    cur=u.get("today",0)
+    if lvl=="vip": return False,cur,9999
+    if lvl=="starter": lim=20
+    elif lvl=="pro": lim=50
+    else: lim=3
+    return cur>=lim,cur,lim
+
+def inc(uid):
+    d=load_db();u=d.get(uid)
+    if u:
+        if u.get("date")!=str(date.today()): u["today"]=0;u["date"]=str(date.today())
+        u["today"]=u.get("today",0)+1;d[uid]=u;save(d)
+
+def get_sig(pair,exp,lvl):
+    conf=random.randint(85,96) if lvl in ["vip","pro"] else random.randint(72,88)
+    sig="📈 BUY" if random.random()>0.5 else "📉 SELL"
+    rsi=random.uniform(25,75);trend="🔼 Up" if "BUY" in sig else "🔽 Down"
+    return sig,rsi,trend,conf
 
 def store_and_cleanup(chat_id, msg_id):
     if chat_id not in msg_hist: msg_hist[chat_id]=[]
     msg_hist[chat_id].append(msg_id)
-    # Keep history small, but DON'T delete yet - will delete on next command
     if len(msg_hist[chat_id])>30:
-        msg_hist[chat_id]=msg_hist[chat_id][-30:]
-
-def ensure(uid):
-    uid=str(uid); d=load_db()
-    if uid not in d:
-        d[uid]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
-        save(d)
-    u=d[uid]
-    if u.get("date")!=str(date.today()):
-        u["today"]=0;u["wins"]=0;u["losses"]=0;u["win_streak"]=0;u["loss_streak"]=0;u["date"]=str(date.today());save(d)
-    if uid==OWNER and OWNER!="": u["level"]="vip";u["verified"]=True;save(d)
-    return u
-def get_lvl(uid): return ensure(uid).get("level","none")
-def check_limit(uid,lvl):
-    u=ensure(uid);cur=u.get("today",0)
-    lim=9999 if lvl=="vip" else 100 if lvl=="pro" else 20 if lvl=="starter" else 3
-    return cur>=lim,cur,lim
-def inc(uid):
-    d=load_db();u=d.get(str(uid));u["today"]=u.get("today",0)+1;d[str(uid)]=u;save(d)
-def get_sig(pair,exp,lvl):
-    rsi=random.uniform(28,72)
-    sig="SELL" if rsi>65 else "BUY" if rsi<35 else random.choice(["BUY","SELL"])
-    trend="UP 📈" if "BUY" in sig else "DOWN 📉"
-    conf=random.randint(75,85) if lvl=="vip" else random.randint(65,75) if lvl=="pro" else random.randint(65,70) if lvl=="starter" else random.randint(55,65)
-    return sig,rsi,trend,conf
-
-@app.route("/", methods=["GET","POST"])
-@app.route("/webhook", methods=["GET","POST"])
-def wh():
-    if request.method=="GET": return "KAZI V11 AUTO-DELETE ✅"
-    try:
-        js=request.get_data().decode("utf-8")
-        if js:
-            upd=telebot.types.Update.de_json(js)
-            bot.process_new_updates([upd])
-    except Exception as e: print(f"WH ERR {e}")
-    return "OK"
-
-@app.route("/postback")
-def pb():
-    sig=request.args.get("sig","");cid=request.args.get("click_id","");s=request.args.get("sum","0")
-    if not cid: abort(400)
-    calc=hmac.new(SECRET.encode(), cid.encode(), hashlib.sha256).hexdigest()[:10]
-    if sig!="" and sig!=calc: abort(403)
-    try: sv=float(s)
-    except: sv=0
-    d=load_db();u=d.get(cid,{"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0})
-    u["total"]=u.get("total",0)+sv;tot=u["total"];lvl="none"
-    if tot>=100: lvl="vip"
-    elif tot>=50: lvl="pro"
-    elif tot>=20: lvl="starter"
-    order={"none":0,"starter":1,"pro":2,"vip":3}
-    if order.get(lvl,0)>order.get(u.get("level","none"),0): u["level"]=lvl
-    if lvl!="none": u["verified"]=True
-    d[cid]=u;save(d)
-    try: bot.send_message(cid, f"✅ DEPOSIT ${sv} Total ${tot} Level {u.get('level').upper()}!")
-    except: pass
-    return "OK"
-
-def auto_delete_worker():
-    while True:
-        try:
-            lst=load_broadcast();now=datetime.now();new_lst=[]
-            for item in lst:
-                try:
-                    del_at=datetime.fromisoformat(item["delete_at"])
-                    if now>=del_at:
-                        try: bot.delete_message(item["chat_id"], item["msg_id"])
-                        except: pass
-                    else: new_lst.append(item)
-                except: new_lst.append(item)
-            if len(new_lst)!=len(lst): save_broadcast(new_lst)
+        old=msg_hist[chat_id].pop(0)
+        try: bot.delete_message(chat_id, old)
         except: pass
-        time.sleep(1800) # check every 30min
-threading.Thread(target=auto_delete_worker, daemon=True).start()
 
-# ALWAYS REPLIES FIRST, THEN CLEANS OLD
-@bot.message_handler(commands=["start"])
-def start_cmd(m):
-    uid=str(m.from_user.id); chat_id=m.chat.id
-    # Clear pending states
-    if uid in broadcast_data: del broadcast_data[uid]
-    if uid in add_pending: del add_pending[uid]
-    u=ensure(uid)
-    if u.get("banned"):
-        mm=bot.send_message(chat_id,"🚫 Banned")
-        store_and_cleanup(chat_id, mm.message_id)
-        # Delete old after sending
-        threading.Thread(target=cleanup_old_messages, args=(chat_id, mm.message_id), daemon=True).start()
-        return
+def cleanup_old_messages(chat_id, new_msg_id):
+    time.sleep(1)
+    if chat_id not in msg_hist: return
+    for mid in list(msg_hist[chat_id][:-1]):
+        try: bot.delete_message(chat_id, mid)
+        except: pass
+    msg_hist[chat_id]=[new_msg_id] if new_msg_id else []
+
+def get_main_kb(uid):
     lvl=get_lvl(uid)
-    if not u.get("verified"):
-        k=types.InlineKeyboardMarkup();k.add(types.InlineKeyboardButton("📝 Register",url=LINK+"?click_id="+uid))
-        mm=bot.send_message(chat_id,f"👋 Welcome {m.from_user.first_name}!\nRegister:\n{LINK}?click_id={uid}",reply_markup=k)
+    k=types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    k.add(types.KeyboardButton("🚀 Get Signal 🔥"))
+    k.add(types.KeyboardButton("💰 Deposit"), types.KeyboardButton("❓ How"))
+    k.add(types.KeyboardButton("👤 Status"), types.KeyboardButton("📞 Support"))
+    k.add(types.KeyboardButton("🚀 Upgrade"))
+    if uid==OWNER: k.add(types.KeyboardButton("👑 Admin"))
+    return k
+
+def signal_keyboard():
+    k=types.InlineKeyboardMarkup(row_width=2)
+    k.add(types.InlineKeyboardButton("✅ WIN",callback_data="res_win"),types.InlineKeyboardButton("❌ LOSS",callback_data="res_loss"))
+    k.add(types.InlineKeyboardButton("🔥 Next Signal",callback_data="sel_market"))
+    return k
+
+@app.route('/')
+def home(): return "Bot Running V11"
+
+@bot.message_handler(commands=["start","clearme"])
+def start_cmd(m):
+    chat_id=m.chat.id;uid=str(m.from_user.id)
+    if m.text.startswith("/clearme") and uid!=OWNER: return
+    if m.text.startswith("/clearme"):
+        msg_hist[chat_id]=[];mm=bot.send_message(chat_id,"✅ Cleared! /start")
         store_and_cleanup(chat_id, mm.message_id)
         threading.Thread(target=cleanup_old_messages, args=(chat_id, mm.message_id), daemon=True).start()
         return
-    k=types.InlineKeyboardMarkup(row_width=2)
-    k.add(types.InlineKeyboardButton("🚀 Get Signal 🔥",callback_data="sel_market"))
-    k.add(types.InlineKeyboardButton("💰 Deposit",callback_data="dep"),types.InlineKeyboardButton("❓ How",callback_data="how"))
-    k.add(types.InlineKeyboardButton("👤 Status",callback_data="status"),types.InlineKeyboardButton("📞 Support",callback_data="sup"))
-    k.add(types.InlineKeyboardButton("🚀 Upgrade",callback_data="upg"))
-    if uid==OWNER: k.add(types.InlineKeyboardButton("👑 Admin",callback_data="admin"))
-    mm=bot.send_message(chat_id,f"👋 Welcome {m.from_user.first_name}!\n👑 {lvl.upper()} 📊 Today {u.get('today',0)}\n🔥 Ready?",reply_markup=k)
+    u=ensure(uid);lvl=get_lvl(uid)
+    name=m.from_user.first_name or "Trader"
+    txt=f"👋 Welcome {name}!\n👑 {lvl.upper()} 📊 Today {u.get('today',0)}\n🔥 Ready?"
+    mm=bot.send_message(chat_id, txt, reply_markup=get_main_kb(uid))
     store_and_cleanup(chat_id, mm.message_id)
-    # AUTO DELETE OLD MESSAGES AFTER replying (keep new one)
     threading.Thread(target=cleanup_old_messages, args=(chat_id, mm.message_id), daemon=True).start()
 
-@bot.message_handler(commands=["clearme","clear"])
-def clearme(m):
-    chat_id=m.chat.id; uid=str(m.from_user.id)
-    if uid in broadcast_data: del broadcast_data[uid]
-    if uid in add_pending: del add_pending[uid]
-    mm=bot.send_message(chat_id,"✅ Cleared! /start")
-    store_and_cleanup(chat_id, mm.message_id)
-    threading.Thread(target=cleanup_old_messages, args=(chat_id, mm.message_id), daemon=True).start()@bot.message_handler(content_types=['text','photo','video','document','animation'], func=lambda m: str(m.from_user.id)==OWNER and (str(m.from_user.id) in broadcast_data or str(m.from_user.id) in add_pending) and not (m.text and m.text.startswith("/")))
+@bot.message_handler(func=lambda m: m.text and not m.text.startswith("/") and str(m.from_user.id) not in broadcast_data and str(m.from_user.id) not in add_pending)
+def text_handler(m):
+    chat_id=m.chat.id;uid=str(m.from_user.id);txt=m.text.strip();lvl=get_lvl(uid)
+    if txt in ["🚀 Get Signal 🔥","Get Signal"]:
+        k=types.InlineKeyboardMarkup(row_width=2)
+        k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("📊 OTC 30",callback_data="m_otc"))
+        mm=bot.send_message(chat_id,"🔥 Select Market:",reply_markup=k)
+        store_and_cleanup(chat_id, mm.message_id); return
+    if txt in ["💰 Deposit","Deposit"]:
+        k=types.InlineKeyboardMarkup();k.add(types.InlineKeyboardButton("💰 Deposit",url=LINK+"?click_id="+uid))
+        mm=bot.send_message(chat_id,f"💰 DEPOSIT {LINK}?click_id={uid}",reply_markup=k)
+        store_and_cleanup(chat_id, mm.message_id);return
+    if txt in ["❓ How","How"]:
+        mm=bot.send_message(chat_id,"❓ HOW: Register Deposit /start Get Signal")
+        store_and_cleanup(chat_id, mm.message_id);return
+    if txt in ["👤 Status","Status"]:
+        u=ensure(uid);lim_txt="♾️" if lvl=="vip" else "20" if lvl=="starter" else "100" if lvl=="pro" else "3"
+        mm=bot.send_message(chat_id,f"👤 Level:{lvl.upper()} Deposit:${u.get('total',0)} Today:{u.get('today',0)}/{lim_txt}")
+        store_and_cleanup(chat_id, mm.message_id);return
+    if txt in ["📞 Support","Support"]:
+        mm=bot.send_message(chat_id,"📞 Support @YourSupport"); store_and_cleanup(chat_id, mm.message_id);return
+    if txt in ["🚀 Upgrade","Upgrade"]:
+        u=ensure(uid)
+        k=types.InlineKeyboardMarkup()
+        k.add(types.InlineKeyboardButton("⭐ STARTER $20",url=LINK+"?click_id="+uid))
+        k.add(types.InlineKeyboardButton("💎 PRO $50",url=LINK+"?click_id="+uid))
+        k.add(types.InlineKeyboardButton("👑 VIP $100",url=LINK+"?click_id="+uid))
+        mm=bot.send_message(chat_id,f"🚀 UPGRADE Level:{lvl.upper()} Deposit:${u.get('total',0)}",reply_markup=k)
+        store_and_cleanup(chat_id, mm.message_id);return
+    if txt in ["👑 Admin","Admin"] and uid==OWNER:
+        k=types.InlineKeyboardMarkup(row_width=2)
+        k.add(types.InlineKeyboardButton("👥 Users",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
+        k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
+        k.add(types.InlineKeyboardButton("➕ Add User 👑",callback_data="ad_adduser"))
+        k.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
+        k.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
+        mm=bot.send_message(chat_id,f"👑 ADMIN V11 👑\n👥 Users {len(load_db())}",reply_markup=k)
+        store_and_cleanup(chat_id, mm.message_id); return@bot.message_handler(content_types=['text','photo','video','document','animation'], func=lambda m: str(m.from_user.id)==OWNER and (str(m.from_user.id) in broadcast_data or str(m.from_user.id) in add_pending) and not (m.text and m.text.startswith("/")))
 def owner_pending_handler(m):
     tid=str(m.from_user.id); chat_id=m.chat.id
     if tid in add_pending:
