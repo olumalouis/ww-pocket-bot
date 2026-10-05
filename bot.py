@@ -7,13 +7,12 @@ import os
 from datetime import datetime, timezone
 from flask import Flask, request
 
-BOT_TOKEN="YOUR_BOT_TOKEN_HERE"
+BOT_TOKEN=os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 OWNER_ID=8188622130
 AFFILIATE_LINK="https://pocket-option.com/en/cabinet/try-demo/?lid=1154235"
 
 pairs_real=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/JPY","EUR/GBP","GBP/JPY","AUD/JPY","EUR/AUD","USD/CHF","NZD/USD","EUR/CAD","GBP/CAD","AUD/CAD"]
 pairs_otc=["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","AUD/USD OTC","USD/CAD OTC","EUR/JPY OTC","EUR/GBP OTC","GBP/JPY OTC","AUD/JPY OTC","EUR/AUD OTC","USD/CHF OTC","NZD/USD OTC","EUR/CAD OTC","GBP/CAD OTC","AUD/CAD OTC","EUR/NZD OTC","GBP/NZD OTC","GBP/AUD OTC","AUD/NZD OTC","EUR/CHF OTC","GBP/CHF OTC","CHF/JPY OTC","AUD/CHF OTC","CAD/CHF OTC","USD/BRL OTC","EUR/BRL OTC","USD/INR OTC","USD/TRY OTC","EUR/TRY OTC","USD/ZAR OTC"]
-
 MOTIV_WORDS=["STAY STRONG","NEXT IS WIN","DON'T GIVE UP","FOCUS","YOU GOT THIS","KEEP GOING","STAY CALM","BIG WIN COMING","BELIEVE","PUSH HARD"]
 
 bot=telebot.TeleBot(BOT_TOKEN)
@@ -24,7 +23,7 @@ broadcast_wait={}
 
 @app.route('/')
 def home():
-    return "✅ WW POCKET SIGNALS V13.2.9 Alive"
+    return "✅ WW POCKET SIGNALS V13.2.9 Alive - OWNER 8188622130"
 
 @app.route('/postback')
 def postback():
@@ -100,25 +99,11 @@ def main_menu():
     return markup
 
 def locked_message(uid):
-    link=f"{AFFILIATE_LINK}?subid={uid}" if "?" not in AFFILIATE_LINK else f"{AFFILIATE_LINK}&subid={uid}"
+    link=f"{AFFILIATE_LINK}?subid={uid}"
     markup=types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("🔗 Register Now - Unlock 5/day FREE", url=link))
     markup.add(types.InlineKeyboardButton("📜 How it Works", callback_data="howitworks"))
-    text=(
-f"🔒 WELCOME TO WW POCKET SIGNALS BOT\n\n"
-f"Hello! 👋\n\n"
-f"🔥 80-87% WIN RATE SIGNALS\n\n"
-f"🔒 YOU ARE LOCKED - Register to unlock\n\n"
-f"How to unlock:\n"
-f"1️⃣ Register via link with?subid={uid}\n"
-f"2️⃣ Get 5/day FREE instantly\n"
-f"3️⃣ Deposit upgrade:\n"
-f"⚪ NONE 5/day 55-65% FREE\n"
-f"🟢 STARTER $20 20/day 65-70%\n"
-f"🔵 PRO $50 100/day 70-80%\n"
-f"💎 VIP $100 UNLIMITED 80-87%\n\n"
-f"👇 Click Register Now!"
-    )
+    text=(f"🔒 WELCOME TO WW POCKET SIGNALS BOT\n\nHello! 👋\n\n🔥 80-87% WIN RATE SIGNALS\n\n🔒 YOU ARE LOCKED - Register to unlock\n\nHow to unlock:\n1️⃣ Register via link with?subid={uid}\n2️⃣ Get 5/day FREE instantly\n3️⃣ Deposit upgrade:\n⚪ NONE 5/day 55-65% FREE\n🟢 STARTER $20 20/day 65-70%\n🔵 PRO $50 100/day 70-80%\n💎 VIP $100 UNLIMITED 80-87%\n\n👇 Click Register Now!")
     return text, markup
 
 def track_msg(chat_id, msg):
