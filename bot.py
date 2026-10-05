@@ -84,8 +84,8 @@ def inc(uid):
 
 def get_sig(pair,exp,lvl):
     conf=random.randint(85,96) if lvl in ["vip","pro"] else random.randint(72,88)
-    sig="📈 BUY" if random.random()>0.5 else "📉 SELL"
-    rsi=random.uniform(25,75);trend="🔼 Up" if "BUY" in sig else "🔽 Down"
+    sig="BUY" if random.random()>0.5 else "SELL"
+    rsi=random.uniform(25,75);trend="Up" if "BUY" in sig else "Down"
     return sig,rsi,trend,conf
 
 def store_and_cleanup(chat_id, msg_id):
@@ -116,7 +116,7 @@ def signal_keyboard():
     return k
 
 @app.route('/')
-def home(): return "Bot Running V11 Final"
+def home(): return "Bot Running V11 Final 🔥"
 
 @bot.message_handler(commands=["start","clearme"])
 def start_cmd(m):
@@ -177,9 +177,9 @@ def owner_pending_handler(m):
 @bot.message_handler(commands=["adduser","broadcast","ban","unban"])
 def admin_cmds(m):
     if str(m.from_user.id)!=OWNER: return
-    chat_id=m.chat.id;args=m.text.split(" ",1);cmd=args[0].replace("/","").split("@")[0]
+    chat_id=m.chat.id; a=m.text.split()
+    cmd=a[0].replace("/","").split("@")[0] if a else ""
     if cmd=="adduser":
-        a=m.text.split()
         if len(a)<3:
             mm=bot.send_message(chat_id,"❌ /adduser ID LEVEL\nEx: /adduser 123456 VIP"); store_and_cleanup(chat_id, mm.message_id); return
         uid=a[1].strip().replace("@","");lvl=a[2].lower().strip();days=None
@@ -245,12 +245,37 @@ def cb(c):
             if d=="res_win":
                 ud["wins"]=ud.get("wins",0)+1;ud["today_wins"]=ud.get("today_wins",0)+1;ud["win_streak"]=ud.get("win_streak",0)+1;ud["loss_streak"]=0;dbb[tid]=ud;save(dbb)
                 adm["total_wins"]=adm.get("total_wins",0)+1;save_admin(adm)
-                mm=bot.send_message(chat_id, f"✅ WIN! Today {ud.get('today_wins',0)}W | Streak {ud['win_streak']}!", reply_markup=signal_keyboard())
+                win_list=[
+                    f"✅ BOOM! WIN! 🔥💰\n🏆 Streak: {ud['win_streak']} Wins!\n🚀 Keep pushing {lvl.upper()}!",
+                    f"✅ PERFECT WIN! 💎🔥\n📈 {ud['win_streak']} in a row! You're on fire!",
+                    f"✅ KAZI WIN! 👑💸\n🔥 Win streak {ud['win_streak']} - Machine!",
+                    f"✅ BANG! WIN CONFIRMED! 🚀\n💰 {ud['win_streak']} Wins straight! Keep going!"
+                ]
+                mm=bot.send_message(chat_id, random.choice(win_list), reply_markup=signal_keyboard())
                 store_and_cleanup(chat_id, mm.message_id); return
             else:
                 ud["losses"]=ud.get("losses",0)+1;ud["today_losses"]=ud.get("today_losses",0)+1;ud["loss_streak"]=ud.get("loss_streak",0)+1;ud["win_streak"]=0;dbb[tid]=ud;save(dbb)
                 adm["total_losses"]=adm.get("total_losses",0)+1;save_admin(adm)
-                mm=bot.send_message(chat_id, f"❌ LOSS Today {ud.get('today_losses',0)}L - Next WIN!", reply_markup=signal_keyboard())
+                ls=ud.get("loss_streak",1)
+                if ls<=2:
+                    loss_list=[
+                        f"❌ Loss, but we learn! 📚\n💪 Loss streak {ls} - Next is WIN for sure!",
+                        f"❌ Not today, but we fight! ⚔️\n🔥 {ls} loss - Market trick, we adapt!",
+                        f"❌ Small loss! 💸\n🚀 Top traders lose too, WIN coming!"
+                    ]
+                    msg=random.choice(loss_list)
+                elif ls==3:
+                    msg=f"❌ 3 Losses in row 😤\n🧠 Don't revenge trade! Take small break\n💪 Next is WIN, trust KAZI!"
+                elif ls==4:
+                    msg=f"❌ 4 Losses 💔\n⚠️ Slow down boss! Reduce lot size\n🔥 We recover together!"
+                elif ls==5:
+                    msg=f"❌ 5 Losses in row! 🚨\n🛑 Almost at limit! 1 more = STOP\n🧘 Breathe, next will recover!"
+                else:
+                    msg=f"⚠️ WARNING! 6 LOSS STREAK 🚫\n\n🧠 Boss, STOP trading now!\n📉 Market is bad today, take a break!\n☕️ Rest 1 hour, clear mind!\n🔄 Come back fresh = WIN again!\n\n💡 Pro traders know when to STOP!\n🛑 Paused for your safety!\n\nStreak: {ls}L"
+                    try:
+                        bot.send_message(chat_id, "🚨 STOP TRADING NOW 🚨\n"+msg)
+                    except: pass
+                mm=bot.send_message(chat_id, msg, reply_markup=signal_keyboard())
                 store_and_cleanup(chat_id, mm.message_id); return
         if d=="admin" and tid==OWNER:
             k=types.InlineKeyboardMarkup(row_width=2)
