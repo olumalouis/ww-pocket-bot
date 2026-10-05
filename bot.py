@@ -17,7 +17,7 @@ app=Flask(__name__)
 if not os.path.exists(DB):
     with open(DB,"w") as f: json.dump({},f)
 if not os.path.exists(ADMIN_DB):
-    with open(ADMIN_DB,"w") as f: json.dump({"total_wins":0,"total_losses":0},f)
+    with open(DB,"w") as f: json.dump({"total_wins":0,"total_losses":0},f)
 if not os.path.exists(BROADCAST_DB):
     with open(BROADCAST_DB,"w") as f: json.dump([],f)
 def load_db():
@@ -44,6 +44,7 @@ def save_broadcast(d):
 db=load_db()
 broadcast_pending={}
 broadcast_content_pending={}
+adduser_pending={}
 sec_log=[]
 def ensure(uid):
     uid=str(uid)
@@ -213,20 +214,67 @@ def broadcast_send(m):
     k.add(types.InlineKeyboardButton("🗓️ 1 Week",callback_data="del_7"),types.InlineKeyboardButton("📅 1 Month",callback_data="del_30"))
     k.add(types.InlineKeyboardButton("📆 3 Months",callback_data="del_90"),types.InlineKeyboardButton("🗓️ 6 Months",callback_data="del_180"))
     k.add(types.InlineKeyboardButton("📅 1 Year",callback_data="del_365"))
-    bot.send_message(m.chat.id,f"✅ Message saved! Type: {data['type']}\n🎯 Target: {target}\n\n⏰ Select auto-delete time for broadcast:",reply_markup=k)@bot.message_handler(commands=["adduser","broadcast","ban","unban"])
+    bot.send_message(m.chat.id,f"✅ Message saved! Type: {data['type']}\n🎯 Target: {target}\n\n⏰ Select auto-delete time for broadcast:",reply_markup=k)
+
+@bot.message_handler(content_types=['text'], func=lambda m: str(m.from_user.id)==OWNER and str(m.from_user.id) in adduser_pending)
+def adduser_finish(m):
+    try:
+        level = adduser_pending.get(str(m.from_user.id))
+        uid_input = m.text.strip().replace("@","").split()[0]
+        uid = uid_input
+        d=load_db()
+        mp={"free":0,"starter":20,"pro":50,"vip":100,"lifetime":1000}
+        exp_days=None
+        lvl_clean = level.lower()
+        if "_" in lvl_clean:
+            parts=lvl_clean.split("_")
+            lvl_clean=parts[0]
+            try: exp_days=int(parts[1])
+            except: exp_days=None
+        if lvl_clean not in mp:
+            bot.send_message(m.chat.id,"❌ Invalid level")
+            del adduser_pending[str(m.from_user.id)]
+            return
+        total_val=mp[lvl_clean]
+        final_level = "none" if lvl_clean=="free" else ("vip" if lvl_clean=="lifetime" else lvl_clean)
+        verified = lvl_clean!="free"
+        d[uid]={"total":total_val,"level":final_level,"verified":verified,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
+        if lvl_clean=="free":
+            d[uid]["level"]="none"
+        if exp_days:
+            d[uid]["expires_at"]=(datetime.now()+timedelta(days=exp_days)).isoformat()
+        elif lvl_clean=="lifetime":
+            d[uid]["expires_at"]="lifetime"
+        save(d)
+        del adduser_pending[str(m.from_user.id)]
+        bot.send_message(m.chat.id,f"✅ Added {uid} as {lvl_clean.upper()} 👑 Level={final_level.upper()}")
+    except Exception as e:
+        bot.send_message(m.chat.id,f"❌ Error: {e}")@bot.message_handler(commands=["adduser","broadcast","ban","unban"])
 def admin_cmds(m):
     if str(m.from_user.id)!=OWNER: return
     args=m.text.split(" ",1);cmd=args[0].replace("/","").split("@")[0]
     if cmd=="adduser":
         a=m.text.split()
-        if len(a)<3: bot.send_message(m.chat.id,"❌ /adduser ID LEVEL");return
-        uid=a[1].strip();lvl=a[2].lower().strip()
-        mp={"free":0,"starter":20,"pro":50,"vip":100}
-        if lvl not in mp: return
+        if len(a)<3:
+            bot.send_message(m.chat.id,"❌ Usage:\n/adduser ID LEVEL [DAYS]\nLevels: FREE, STARTER, PRO, VIP, LIFETIME\nEx:\n/adduser 123456 VIP\n/adduser 123456 PRO 30\n/adduser 123456 LIFETIME");return
+        uid=a[1].strip().replace("@","");lvl=a[2].lower().strip()
+        days=None
+        if len(a)>=4:
+            try: days=int(a[3])
+            except: days=None
+        mp={"free":0,"starter":20,"pro":50,"vip":100,"lifetime":1000}
+        if lvl not in mp:
+            bot.send_message(m.chat.id,f"❌ Invalid {lvl}\nValid: {list(mp.keys())}");return
         d=load_db()
-        d[uid]={"total":mp[lvl],"level":lvl if lvl!="free" else "none","verified":lvl!="free","today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
+        final_level = "none" if lvl=="free" else ("vip" if lvl=="lifetime" else lvl)
+        verified = lvl!="free"
+        d[uid]={"total":mp[lvl],"level":final_level,"verified":verified,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0}
         if lvl=="free": d[uid]["level"]="none"
-        save(d);bot.send_message(m.chat.id,f"✅ Added {uid} as {lvl.upper()} 👑");return
+        if days:
+            d[uid]["expires_at"]=(datetime.now()+timedelta(days=days)).isoformat()
+        elif lvl=="lifetime":
+            d[uid]["expires_at"]="lifetime"
+        save(d);bot.send_message(m.chat.id,f"✅ Added {uid} as {lvl.upper()} 👑 Level={final_level.upper()} Days={days or '∞'}");return
     if cmd=="broadcast" and len(args)>1:
         cnt=0;d=load_db()
         for uid in list(d.keys()):
@@ -239,11 +287,13 @@ def admin_cmds(m):
     if cmd=="unban" and len(args)>1:
         d=load_db()
         if args[1].strip() in d: d[args[1].strip()]["banned"]=False;save(d);bot.send_message(m.chat.id,"✅ Unbanned")
+
 def signal_keyboard():
     k=types.InlineKeyboardMarkup(row_width=2)
     k.add(types.InlineKeyboardButton("✅ WIN",callback_data="res_win"),types.InlineKeyboardButton("❌ LOSS",callback_data="res_loss"))
     k.add(types.InlineKeyboardButton("🔥 Next Signal",callback_data="sel_market"))
     return k
+
 @bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     try:
@@ -299,6 +349,7 @@ def cb(c):
             k=types.InlineKeyboardMarkup(row_width=2)
             k.add(types.InlineKeyboardButton("👥 Users",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
             k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
+            k.add(types.InlineKeyboardButton("➕ Add User 👑",callback_data="ad_adduser"))
             k.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
             k.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
             bot.send_message(chat_id,f"👑 ADMIN V10 👑\n👥 Users {len(load_db())}",reply_markup=k);return
@@ -307,6 +358,14 @@ def cb(c):
                 txt="👥 Users:\n"
                 for uid,u in list(load_db().items())[:20]: txt+=f"{uid} {u.get('level')} ${u.get('total')}\n"
                 bot.send_message(chat_id,txt);return
+            if d=="ad_adduser":
+                kb=types.InlineKeyboardMarkup(row_width=2)
+                kb.add(types.InlineKeyboardButton("🆓 FREE",callback_data="addlvl_free"))
+                kb.add(types.InlineKeyboardButton("⭐ STARTER",callback_data="addlvl_starter"))
+                kb.add(types.InlineKeyboardButton("💎 PRO",callback_data="addlvl_pro"))
+                kb.add(types.InlineKeyboardButton("👑 VIP",callback_data="addlvl_vip"))
+                kb.add(types.InlineKeyboardButton("💎 LIFETIME ♾️",callback_data="addlvl_lifetime"))
+                bot.send_message(chat_id,"➕ SELECT LEVEL TO ADD USER:\n\n1️⃣ Choose level below\n2️⃣ Then send User ID",reply_markup=kb);return
             if d=="ad_stats":
                 dd=load_db();tot=sum(u.get('total',0) for u in dd.values());ver=sum(1 for u in dd.values() if u.get('verified'))
                 bot.send_message(chat_id,f"📊 Stats\n👥 U:{len(dd)} ✅ V:{ver} 💰 ${tot}");return
@@ -339,6 +398,11 @@ def cb(c):
                 txt="🔒 Log:\n"
                 for s in sec_log[-10:]: txt+=f"{s.get('ip')} {s.get('status')}\n"
                 bot.send_message(chat_id,txt);return
+        if tid==OWNER and d.startswith("addlvl_"):
+            level=d.replace("addlvl_","")
+            adduser_pending[tid]=level
+            bot.send_message(chat_id,f"✅ Level {level.upper()} selected!\n\n📝 Now SEND the User ID\nExample: 7123456789\n\nHe will be added as {level.upper()} instantly!")
+            return
         if tid==OWNER and d.startswith("broad_"):
             target=d.replace("broad_","");broadcast_pending[tid]=target
             bot.send_message(chat_id,f"🎯 Target {target} selected ✅\n\n📝 Now SEND your message (photo, video, text, emojis, link):");return
