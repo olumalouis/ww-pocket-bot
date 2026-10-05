@@ -336,7 +336,8 @@ f"☕ TAKE BREAK 30-60 min! Don't revenge trade!\n📊 Daily W:{users[uid]['wins
         broadcast_wait[uid]={"hours":int(hours),"target":target}
         users[uid]["bcast_wait"]={"hours":int(hours),"target":target}
         msg=bot.send_message(chat_id, f"✍️ DONE: Delete {hours}h | Target {target}\nNow send ANY file - ALL SUPPORTED!", reply_markup=main_menu())
-        track_msg(chat_id, msg)def send_pairs(chat_id, typ, page):
+        track_msg(chat_id, msg)
+        def send_pairs(chat_id, typ, page):
     plist=pairs_real if typ=="real" else pairs_otc
     per=10
     start=page*per
