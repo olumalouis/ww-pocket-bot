@@ -1,11 +1,11 @@
 import os, json, random, time, threading
 from datetime import datetime, date, timedelta
-from flask import Flask
+from flask import Flask, request
 import telebot
 from telebot import types
 
 TOKEN=os.getenv("TOKEN") or os.getenv("BOT_TOKEN") or "YOUR_TOKEN_HERE"
-OWNER=str(os.getenv("OWNER_ID") or os.getenv("OWNER") or "7133772812")
+OWNER=str(os.getenv("OWNER_ID") or os.getenv("OWNER") or "8188622130")
 LINK=os.getenv("LINK","https://yourlink.com")
 
 bot=telebot.TeleBot(TOKEN, threaded=True)
@@ -70,19 +70,31 @@ def save_broadcast(d):
 def ensure(uid):
     d=load_db()
     if uid not in d:
-        d[uid]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0}
+        if str(uid)==OWNER:
+            d[uid]={"total":100,"level":"vip","verified":True,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0,"expires_at":"lifetime"}
+        else:
+            d[uid]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0}
         save(d)
+    else:
+        if str(uid)==OWNER and d[uid].get("level","none")=="none":
+            d[uid]["level"]="vip"
+            d[uid]["verified"]=True
+            d[uid]["total"]=100
+            d[uid]["expires_at"]="lifetime"
+            save(d)
     return d[uid]
 
 def get_lvl(uid):
     d=load_db()
     u=d.get(uid)
     if not u:
-        return "none"
+        return "vip" if str(uid)==OWNER else "none"
     if u.get("expires_at") and u["expires_at"]!="lifetime":
         try:
             exp=datetime.fromisoformat(u["expires_at"])
             if datetime.now()>exp:
+                if str(uid)==OWNER:
+                    return "vip"
                 u["level"]="none"
                 u["verified"]=False
                 d[uid]=u
@@ -90,7 +102,10 @@ def get_lvl(uid):
                 return "none"
         except:
             pass
-    return u.get("level","none")
+    lvl=u.get("level","none")
+    if str(uid)==OWNER and lvl=="none":
+        return "vip"
+    return lvl
 
 def check_limit(uid,lvl):
     d=load_db()
@@ -186,7 +201,57 @@ def is_owner_pending(m):
 
 @app.route('/')
 def home():
-    return "Bot Running V12.3 - 6Loss Original + Motivational Upgrade"
+    return "Bot Running V12.6 Owner 8188622130 Pocket Auto + Manual"
+
+@app.route('/postback')
+def pocket_postback():
+    try:
+        uid = request.args.get('click_id') or request.args.get('clickid') or request.args.get('subid') or request.args.get('user_id') or request.args.get('sub_id') or request.args.get('p1')
+        amount = request.args.get('amount') or request.args.get('sum') or request.args.get('deposit') or request.args.get('total') or request.args.get('first_deposit') or "0"
+        if not uid:
+            return "Missing click_id - Use?click_id={click_id}&amount={sum}", 400
+        try:
+            amt = float(str(amount).replace('$','').replace(',','').strip())
+        except:
+            amt = 0
+        if amt <= 0:
+            return f"Ignored zero for {uid}", 200
+        d = load_db()
+        if str(uid) not in d:
+            d[str(uid)] = {"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0}
+        u = d[str(uid)]
+        old_total = u.get("total",0)
+        u["total"] = old_total + amt
+        total = u["total"]
+        if total >= 100:
+            u["level"] = "vip"
+            u["verified"] = True
+            u["expires_at"] = "lifetime"
+            new_lvl = "VIP ♾️ Unlimited up to 87% WR"
+        elif total >= 50:
+            u["level"] = "pro"
+            u["verified"] = True
+            new_lvl = "PRO 100/day 70-85% WR"
+        elif total >= 20:
+            u["level"] = "starter"
+            u["verified"] = True
+            new_lvl = "STARTER 20/day 60-70% WR"
+        else:
+            u["level"] = "none"
+            new_lvl = "FREE 5/day"
+        d[str(uid)] = u
+        save(d)
+        try:
+            bot.send_message(int(uid), f"💰 Pocket Deposit! ${amt} ✅\n💵 Total: ${total}\n👑 Auto upgraded to {new_lvl}!\n🚀 /start")
+        except:
+            pass
+        try:
+            bot.send_message(int(OWNER), f"💰 POCKET AUTO 💰\n👤 {uid}\n💵 +${amt} Total ${old_total}→${total}\n👑 {new_lvl}")
+        except:
+            pass
+        return f"OK {uid} +{amt} total {total} -> {new_lvl}", 200
+    except Exception as e:
+        return f"Error {e}", 500
 
 @bot.message_handler(commands=["start","clearme","cancel"])
 def start_cmd(m):
@@ -212,7 +277,15 @@ def start_cmd(m):
     u=ensure(uid)
     lvl=get_lvl(uid)
     name=m.from_user.first_name or "Trader"
-    txt=f"👋 Welcome {name}!\n👑 {lvl.upper()} 📊 Today {u.get('today',0)} | {u.get('today_wins',0)}W-{u.get('today_losses',0)}L\n🔥 V12.3 Ready?"
+    if lvl=="vip":
+        lim_show="♾️ Unlimited 87% WR"
+    elif lvl=="pro":
+        lim_show="100/day 70-85% WR"
+    elif lvl=="starter":
+        lim_show="20/day 60-70% WR"
+    else:
+        lim_show="5/day"
+    txt=f"👋 Welcome {name}!\n👑 {lvl.upper()} 📊 Today {u.get('today',0)}/{lim_show}\n🔥 V12.6 Ready? Auto+Manual ON!"
     mm=bot.send_message(chat_id, txt, reply_markup=get_main_kb(uid))
     store_and_cleanup(chat_id, mm.message_id)
 @bot.message_handler(content_types=["text","photo","video","document","animation"], func=is_owner_pending)
@@ -225,7 +298,7 @@ def owner_pending_handler(m):
             txt=m.text or ""
             uid_input=txt.strip().replace("@","").split()[0] if txt else ""
             if not uid_input.isdigit():
-                mm=bot.send_message(chat_id,"❌ Send NUMERIC ID only! Ex: 7123456789\n/cancel to exit")
+                mm=bot.send_message(chat_id,"❌ Send NUMERIC ID only! Ex: 8188622130\n/cancel to exit")
                 store_and_cleanup(chat_id, mm.message_id)
                 return
             uid=uid_input
@@ -247,7 +320,7 @@ def owner_pending_handler(m):
                 d[uid]["expires_at"]="lifetime"
             save(d)
             add_pending.pop(tid,None)
-            mm=bot.send_message(chat_id,f"✅ Added {uid} as {lvl_clean.upper()} 👑\nDeposit: ${total_val}")
+            mm=bot.send_message(chat_id,f"✅ MANUAL ADD: {uid} as {lvl_clean.upper()} 👑\n💰 ${total_val} - Works with Pocket auto too!")
             store_and_cleanup(chat_id, mm.message_id)
         except Exception as e:
             add_pending.pop(tid,None)
@@ -306,7 +379,7 @@ def admin_cmds(m):
         if m.reply_to_message and m.reply_to_message.from_user:
             reply_uid=str(m.reply_to_message.from_user.id)
         if len(a)<3 and not reply_uid:
-            mm=bot.send_message(chat_id,"📌 ADDUSER V12.3:\n\n/adduser ID LEVEL [DAYS]\nEx: /adduser 123456789 VIP\n/adduser 123,456,789 STARTER 30\nReply to user: /adduser VIP")
+            mm=bot.send_message(chat_id,"📌 MANUAL ADDUSER V12.6:\n\n/adduser ID LEVEL [DAYS]\nEx: /adduser 123456789 VIP\n/adduser 123,456,789 STARTER 30\nReply: /adduser VIP\n\n💰 POCKET AUTO also works via postback!")
             store_and_cleanup(chat_id, mm.message_id)
             return
         lvl=None
@@ -335,7 +408,7 @@ def admin_cmds(m):
                 except:
                     days=None
         if not uids:
-            mm=bot.send_message(chat_id,"❌ No valid ID! Ex: /adduser 7133772812 VIP")
+            mm=bot.send_message(chat_id,"❌ No valid ID! Ex: /adduser 8188622130 VIP")
             store_and_cleanup(chat_id, mm.message_id)
             return
         if not lvl or lvl not in mp:
@@ -356,7 +429,7 @@ def admin_cmds(m):
             added.append(uid)
         save(d)
         days_txt=f" for {days} days" if days else " forever"
-        mm=bot.send_message(chat_id,f"✅ V12.3 ADDED {len(added)} user(s) as {lvl.upper()}{days_txt} 👑\nIDs: {', '.join(added)}\nDeposit: ${mp[lvl]}")
+        mm=bot.send_message(chat_id,f"✅ MANUAL ADDED {len(added)} as {lvl.upper()}{days_txt} 👑\nIDs: {', '.join(added)}\n💰 Pocket auto still ON for FTD!")
         store_and_cleanup(chat_id, mm.message_id)
         return
 
@@ -374,17 +447,17 @@ def text_handler(m):
     if txt in ["🚀 Get Signal 🔥","Get Signal","/getsignal"]:
         k=types.InlineKeyboardMarkup(row_width=2)
         k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("📊 OTC 30",callback_data="m_otc"))
-        mm=bot.send_message(chat_id,"🔥 Select Market V12.3:",reply_markup=k)
+        mm=bot.send_message(chat_id,"🔥 Select Market V12.6 Pocket Auto+Manual:",reply_markup=k)
         store_and_cleanup(chat_id, mm.message_id)
         return
     if txt in ["💰 Deposit","Deposit"]:
         k=types.InlineKeyboardMarkup()
         k.add(types.InlineKeyboardButton("💰 Deposit",url=LINK+"?click_id="+uid))
-        mm=bot.send_message(chat_id,f"💰 DEPOSIT {LINK}?click_id={uid}",reply_markup=k)
+        mm=bot.send_message(chat_id,f"💰 DEPOSIT {LINK}?click_id={uid}\n💡 After deposit, auto upgrade via Pocket postback!",reply_markup=k)
         store_and_cleanup(chat_id, mm.message_id)
         return
     if txt in ["❓ How","How"]:
-        mm=bot.send_message(chat_id,"❓ HOW: Register Deposit /start Get Signal")
+        mm=bot.send_message(chat_id,"❓ HOW: Register via link with?click_id=YOUR_ID, Deposit, Auto upgrade via Pocket postback + manual /adduser also works!")
         store_and_cleanup(chat_id, mm.message_id)
         return
     if txt in ["👤 Status","Status"]:
@@ -397,7 +470,7 @@ def text_handler(m):
             lim_txt="20/day 60-70% WR"
         else:
             lim_txt="5/day"
-        mm=bot.send_message(chat_id,f"👤 Level:{lvl.upper()}\n💰 Deposit:${u.get('total',0)}\n📊 Today:{u.get('today',0)}/{lim_txt}\n🏆 {u.get('today_wins',0)}W-{u.get('today_losses',0)}L\n🔥 Keep grinding!")
+        mm=bot.send_message(chat_id,f"👤 ID:{uid}\n👑 Level:{lvl.upper()}\n💰 Deposit:${u.get('total',0)}\n📊 Today:{u.get('today',0)}/{lim_txt}\n🏆 W/L: {u.get('today_wins',0)}W-{u.get('today_losses',0)}L Today | {u.get('wins',0)}W-{u.get('losses',0)}L Total\n🔥 Streak: {u.get('win_streak',0)}W {u.get('loss_streak',0)}L\n💰 Pocket Auto+Manual ON!")
         store_and_cleanup(chat_id, mm.message_id)
         return
     if txt in ["📞 Support","Support"]:
@@ -424,7 +497,7 @@ Perfect to test, but limited! 🔓 Every master was once a beginner!
 👑 VIP - $100 Deposit - ♾️ Unlimited up to 87% WR
 💰 ULTIMATE POWER! No limits! Max WR 87%! Unlimited signals = Unlimited profit! Top traders are VIP! Become a legend today! Believe in yourself, invest in yourself!
 
-💪 Motivational: Every PRO was once a beginner! Deposit more, earn more! Your success is one upgrade away! Don't watch others win, be the winner!
+💪 Auto unlock after Pocket deposit! Manual add also available!
 
 👇 Click below to upgrade:
 """
@@ -437,15 +510,15 @@ Perfect to test, but limited! 🔓 Every master was once a beginner!
         return
     if txt in ["👑 Admin","Admin"] and uid==OWNER:
         k2=types.InlineKeyboardMarkup(row_width=2)
-        k2.add(types.InlineKeyboardButton("➕ Add User 👑 TOP V12",callback_data="ad_adduser"))
+        k2.add(types.InlineKeyboardButton("➕ Add User 👑 TOP",callback_data="ad_adduser"))
         k2.add(types.InlineKeyboardButton("👥 Users",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
         k2.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
         k2.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
         k2.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
-        mm=bot.send_message(chat_id,f"👑 ADMIN V12.3 👑\n👥 Users {len(load_db())}\n📊 Limits: FREE 5, STARTER 20, PRO 100, VIP ♾️ 87%\n🆕 AddUser Improved!",reply_markup=k2)
+        mm=bot.send_message(chat_id,f"👑 ADMIN V12.6 👑 Owner {OWNER}\n👥 Users {len(load_db())}\n💰 Pocket Auto+Manual Both ON!\n📊 FREE 5, STARTER 20, PRO 100, VIP ♾️ 87%",reply_markup=k2)
         store_and_cleanup(chat_id, mm.message_id)
         return
-@bot.callback_query_handler(func=lambda c: True)
+        @bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     try:
         bot.answer_callback_query(c.id)
@@ -517,7 +590,7 @@ def cb(c):
             k2.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
             k2.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
             k2.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
-            mm=bot.send_message(chat_id,f"👑 ADMIN V12.3 👑\n👥 Users {len(load_db())}",reply_markup=k2)
+            mm=bot.send_message(chat_id,f"👑 ADMIN V12.6 Owner {OWNER}",reply_markup=k2)
             store_and_cleanup(chat_id, mm.message_id)
             return
         if tid==OWNER and data.startswith("ad_"):
@@ -535,14 +608,14 @@ def cb(c):
                 kb.add(types.InlineKeyboardButton("💎 PRO 100/day 70-85%",callback_data="addlvl_pro"))
                 kb.add(types.InlineKeyboardButton("👑 VIP Unlimited 87%",callback_data="addlvl_vip"))
                 kb.add(types.InlineKeyboardButton("💎 LIFETIME ♾️",callback_data="addlvl_lifetime"))
-                mm=bot.send_message(chat_id,"➕ SELECT LEVEL V12.3:\nFREE 5/day\nSTARTER 20/day 60-70% WR\nPRO 100/day 70-85% WR\nVIP Unlimited 87% WR",reply_markup=kb)
+                mm=bot.send_message(chat_id,"➕ SELECT LEVEL V12.6:\nFREE 5/day\nSTARTER 20/day 60-70% WR\nPRO 100/day 70-85% WR\nVIP Unlimited 87% WR\n\nBoth Auto (Pocket) + Manual works!",reply_markup=kb)
                 store_and_cleanup(chat_id, mm.message_id)
                 return
             if data=="ad_stats":
                 dd=load_db()
                 tot=sum(u.get('total',0) for u in dd.values())
                 ver=sum(1 for u in dd.values() if u.get('verified'))
-                mm=bot.send_message(chat_id,f"📊 U:{len(dd)} V:{ver} ${tot}\nLimits: FREE 5, STARTER 20, PRO 100, VIP ♾️")
+                mm=bot.send_message(chat_id,f"📊 U:{len(dd)} V:{ver} ${tot}\nOwner {OWNER}\nLimits: FREE 5, STARTER 20, PRO 100, VIP ♾️\n💰 Pocket Auto+Manual")
                 store_and_cleanup(chat_id, mm.message_id)
                 return
             if data=="ad_wr":
@@ -600,7 +673,7 @@ def cb(c):
         if tid==OWNER and data.startswith("addlvl_"):
             level=data.replace("addlvl_","")
             add_pending[tid]=level
-            mm=bot.send_message(chat_id,f"✅ Level {level.upper()} selected!\nSEND User ID:\n/cancel to exit")
+            mm=bot.send_message(chat_id,f"✅ Level {level.upper()} selected!\nSEND User ID: 8188622130 etc\n/cancel to exit\n💡 Auto Pocket also works parallel!")
             store_and_cleanup(chat_id, mm.message_id)
             return
         if tid==OWNER and data.startswith("broad_"):
@@ -798,4 +871,4 @@ if __name__=="__main__":
     threading.Thread(target=run_bot, daemon=True).start()
     threading.Thread(target=auto_delete_worker, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT",8080)))
-                    
+    
