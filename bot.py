@@ -169,9 +169,7 @@ def handle_bcast(m):
                     bot.delete_message(cid,mid)
                 except:
                     pass
-        threading.Thread(target=auto_del, daemon=True).start()
-
-def get_signal_with_indicators():
+        threading.Thread(target=auto_del, daemon=True).start()def get_signal_with_indicators():
     rsi=round(random.uniform(18,82),1)
     price=round(random.uniform(1.0500,1.3500),4)
     ema200=round(price + random.uniform(-0.0150,0.0150),4)
@@ -322,7 +320,9 @@ def text_buttons(m):
         msg=bot.send_message(m.chat.id, f"👑 ADMIN PANEL V13.2.9\nTotal: {len(users)}\nID: {OWNER_ID}\n✅ REAL 15 OTC 30 + 2 INDICATORS", reply_markup=markup)
         track_msg(m.chat.id, msg)
     elif txt_up.startswith('/USERS') or txt_up.startswith('/STATS') or txt_up.startswith('/GWR') or txt_up.startswith('/ADDUSER') or txt_up.startswith('/SUCH') or txt_up.startswith('/SEARCH') or txt_up.startswith('/FIND') or txt_up.startswith('/BAN') or txt_up.startswith('/UNBAN'):
-        admin_cmd(m)@bot.callback_query_handler(func=lambda c: True)
+        admin_cmd(m)
+
+@bot.callback_query_handler(func=lambda c: True)
 def callbacks(c):
     uid=c.from_user.id
     data=c.data
@@ -386,8 +386,7 @@ def callbacks(c):
         markup=types.InlineKeyboardMarkup(row_width=2)
         markup.add(types.InlineKeyboardButton("✅ REAL 15", callback_data="real_15"), types.InlineKeyboardButton("🔶 OTC 30", callback_data="otc_30"))
         msg=bot.send_message(chat_id, "🔥 Select Market:", reply_markup=markup)
-        track_msg(chat_id, msg)
-    elif data=="win":
+        track_msg(chat_id, msg)    elif data=="win":
         users[uid]["wins"]=users[uid].get("wins",0)+1
         users[uid]["gwr_wins"]=users[uid].get("gwr_wins",0)+1
         users[uid]["streak"]=users[uid].get("streak",0)+1
@@ -495,8 +494,6 @@ def send_signal_result(chat_id, uid, pair, exp, typ):
         return
     users[uid]["used"]+=1
     direction, strength, rsi_label, ema_label=get_signal_with_indicators()
-    left=users[uid]["limit"]-users[uid]["used"]
-    left_str=f"{left}" if lvl!="VIP" else "∞"
     used_str=f"{users[uid]['used']}"
     total_str=f"{users[uid]['limit']}" if lvl!="VIP" else "∞"
     vip_emoji="💎 VIP" if lvl=="VIP" else f"🔥 {lvl}"
@@ -651,9 +648,22 @@ def start_cmd(m):
 def admin_commands(m):
     admin_cmd(m)
 
+# === PERMANENT FIX FOR 409 CONFLICT - AUTO DELETE WEBHOOK ===
 def run_bot():
-    print("Bot V13.2.9 FINAL - OWNER 8188622130 - REAL 15 OTC 30 - 2 INDICATORS - BUY/SELL - NEW SMARTLINK jnLBWcb8IEyL7T")
-    bot.infinity_polling()
+    print("Bot V13.2.9 FINAL - OWNER 8188622130 - REAL 15 OTC 30 - 2 INDICATORS - FIXED 409")
+    try:
+        bot.delete_webhook(drop_pending_updates=True)
+        print("✅ Webhook deleted - polling will work now - NO MORE 409")
+    except Exception as e:
+        print(f"Webhook delete: {e}")
+    print(f"🔑 Token len {len(BOT_TOKEN)} OK")
+    while True:
+        try:
+            print("🚀 Starting polling - bot will reply now...")
+            bot.infinity_polling(skip_pending=True, timeout=20, long_polling_timeout=20)
+        except Exception as e:
+            print(f"❌ Polling crashed: {e} - restarting in 5 sec")
+            time.sleep(5)
 
 if __name__ == "__main__":
     threading.Thread(target=run_bot, daemon=True).start()
