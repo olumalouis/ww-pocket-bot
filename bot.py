@@ -3,8 +3,9 @@ from datetime import datetime, date, timedelta
 from flask import Flask, request
 import telebot
 from telebot import types
-TOKEN=os.getenv("TOKEN") or os.getenv("BOT_TOKEN") or "PUT_TOKEN"
-OWNER=str(os.getenv("OWNER_ID") or "8188622130")
+TOKEN=os.getenv("TOKEN") or os.getenv("BOT_TOKEN") or ""
+if ":" not in TOKEN: print("❌ BAD TOKEN - Add TOKEN var")
+OWNER="8188622130"
 LINK=os.getenv("LINK","https://example.com")
 bot=telebot.TeleBot(TOKEN,threaded=False)
 app=Flask(__name__)
@@ -48,19 +49,10 @@ def ensure(uid):
         if str(uid)==OWNER: d[uid]={"total":100,"level":"vip","verified":True,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0,"expires_at":"lifetime"}
         else: d[uid]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0}
         save(d)
-    else:
-        if str(uid)==OWNER and d[uid].get("level","none")=="none": d[uid]["level"]="vip"; d[uid]["verified"]=True; d[uid]["total"]=100; d[uid]["expires_at"]="lifetime"; save(d)
     return d[uid]
 def get_lvl(uid):
     d=load_db(); u=d.get(uid)
     if not u: return "vip" if str(uid)==OWNER else "none"
-    if u.get("expires_at") and u["expires_at"]!="lifetime":
-        try:
-            exp=datetime.fromisoformat(u["expires_at"])
-            if datetime.now()>exp:
-                if str(uid)==OWNER: return "vip"
-                u["level"]="none"; u["verified"]=False; d[uid]=u; save(d); return "none"
-        except: pass
     lvl=u.get("level","none")
     if str(uid)==OWNER and lvl=="none": return "vip"
     return lvl
@@ -119,146 +111,119 @@ def is_owner_pending(m):
         return True
     return False
 @app.route('/')
-def home(): return "Bot V12.6.2.1 Fixed 15R30OTC"
+def home(): return "V12.6.2.4 TOTAL SUM + Motivational"
 @app.route('/postback')
 def pocket_postback():
     try:
-        uid=request.args.get('click_id') or request.args.get('clickid') or "0"
-        amount=request.args.get('amount') or request.args.get('sum') or "0"
-        if not uid or uid=="0": return "Missing",400
+        uid=request.args.get('click_id') or request.args.get('clickid') or request.args.get('subid') or "0"
+        amount=request.args.get('amount') or request.args.get('sum') or request.args.get('deposit') or "0"
+        if not uid or uid=="0": return "Missing click_id",400
         try: amt=float(str(amount).replace('$','').replace(',','').strip())
         except: amt=0
-        if amt<=0: return "Ignored",200
+        if amt<=0: return f"Ignored {uid}",200
         d=load_db()
         if str(uid) not in d: d[str(uid)]={"total":0,"level":"none","verified":False,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0}
         u=d[str(uid)]; old=u.get("total",0); u["total"]=old+amt; total=u["total"]
-        if total>=100: u["level"]="vip"; u["verified"]=True; u["expires_at"]="lifetime"; new_lvl="VIP"
-        elif total>=50: u["level"]="pro"; u["verified"]=True; new_lvl="PRO"
-        elif total>=20: u["level"]="starter"; u["verified"]=True; new_lvl="STARTER"
-        else: new_lvl="FREE"
+        if total>=100: u["level"]="vip"; u["verified"]=True; u["expires_at"]="lifetime"; new_lvl="VIP ♾️"
+        elif total>=50: u["level"]="pro"; u["verified"]=True; new_lvl="PRO 100/day"
+        elif total>=20: u["level"]="starter"; u["verified"]=True; new_lvl="STARTER 20/day"
+        else: u["level"]="none"; new_lvl="FREE"
         d[str(uid)]=u; save(d)
-        try: bot.send_message(int(uid),f"💰 Pocket ${amt} ✅ Total ${total} 👑 {new_lvl}! /start")
+        try: bot.send_message(int(uid),f"💰 Pocket +${amt} ✅\n💵 Old: ${old} → Total: ${total}\n👑 Level: {new_lvl}\n🎯 Keep depositing = Higher WR!\n/start")
         except: pass
-        try: bot.send_message(int(OWNER),f"💰 AUTO {uid} +${amt} {old}->{total} {new_lvl}")
+        try: bot.send_message(int(OWNER),f"💰 POSTBACK TOTAL SUM 👤 {uid} +${amt} {old}->{total} {new_lvl}")
         except: pass
-        return f"OK {uid} +{amt}",200
+        return f"OK {uid} +{amt} {old}->{total} {new_lvl}",200
     except Exception as e: return f"Error {e}",500
-@bot.message_handler(commands=["start","clearme","cancel"])
+@bot.message_handler(commands=["start","cancel","clearme"])
 def start_cmd(m):
+    print(f"START {m.from_user.id}")
     chat_id=m.chat.id; uid=str(m.from_user.id)
-    if uid==OWNER and m.text.startswith("/cancel"): broadcast_data.pop(uid,None); add_pending.pop(uid,None); bot.send_message(chat_id,"✅ Cancelled - Now /start"); return
-    if m.text.startswith("/clearme") and uid!=OWNER: return
-    if m.text.startswith("/clearme"):
+    if m.text.startswith("/cancel"): broadcast_data.clear(); add_pending.clear(); bot.send_message(chat_id,"✅ Cancelled"); return
+    if m.text.startswith("/clearme") and uid==OWNER:
         if chat_id in msg_hist:
             for mid in msg_hist[chat_id]:
                 try: bot.delete_message(chat_id,mid)
                 except: pass
-            msg_hist[chat_id]=[]
-        bot.send_message(chat_id,"✅ Cleared! /start"); return
-    u=ensure(uid); lvl=get_lvl(uid); name=m.from_user.first_name or "Trader"
+        msg_hist[chat_id]=[]
+        bot.send_message(chat_id,"✅ Cleared"); return
+    u=ensure(uid); lvl=get_lvl(uid)
     if lvl=="vip": lim_show="♾️ Unlimited 87% WR"
     elif lvl=="pro": lim_show="100/day 70-85% WR"
     elif lvl=="starter": lim_show="20/day 60-70% WR"
     else: lim_show="5/day"
-    txt=f"👋 Welcome {name}!\n👑 {lvl.upper()} 📊 Today {u.get('today',0)}/{lim_show}\n🔥 V12.6.2.1 15R+30OTC Ready?"
+    txt=f"👋 Welcome {m.from_user.first_name}!\n👑 {lvl.upper()} 📊 Today {u.get('today',0)}/{lim_show}\n🔥 15R+30OTC Ready?"
     mm=bot.send_message(chat_id,txt,reply_markup=get_main_kb(uid))
     store_and_cleanup(chat_id,mm.message_id)@bot.message_handler(content_types=["text","photo","video","document","animation"],func=is_owner_pending)
 def owner_pending_handler(m):
     tid=str(m.from_user.id); chat_id=m.chat.id
     if tid in add_pending:
-        try:
-            level=add_pending.get(tid); txt=m.text or ""; uid_input=txt.strip().replace("@","").split()[0] if txt else ""
-            if not uid_input.isdigit(): mm=bot.send_message(chat_id,"❌ Send NUMERIC ID only!\n/cancel"); store_and_cleanup(chat_id,mm.message_id); return
-            uid=uid_input; d=load_db(); mp={"free":0,"starter":20,"pro":50,"vip":100,"lifetime":1000}; lvl_clean=level.lower().split("_")[0]; total_val=mp.get(lvl_clean,0)
-            final_level="none" if lvl_clean=="free" else ("vip" if lvl_clean=="lifetime" else lvl_clean); verified=lvl_clean!="free"
-            d[uid]={"total":total_val,"level":final_level,"verified":verified,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0}
-            if lvl_clean=="free": d[uid]["level"]="none"
-            if lvl_clean=="lifetime": d[uid]["expires_at"]="lifetime"
-            save(d); add_pending.pop(tid,None); mm=bot.send_message(chat_id,f"✅ MANUAL ADD: {uid} as {lvl_clean.upper()} 👑"); store_and_cleanup(chat_id,mm.message_id)
-        except Exception as e: add_pending.pop(tid,None); mm=bot.send_message(chat_id,f"❌ Error: {e}"); store_and_cleanup(chat_id,mm.message_id)
-        return
+        txt=m.text or ""; uid_input=txt.strip().replace("@","").split()[0] if txt else ""
+        if not uid_input.isdigit(): bot.send_message(chat_id,"❌ Numeric ID"); return
+        uid=uid_input; d=load_db()
+        level=add_pending.get(tid); lvl_clean=level.lower().split("_")[0]
+        mp={"free":0,"starter":20,"pro":50,"vip":100,"lifetime":1000}
+        d[uid]={"total":mp.get(lvl_clean,0),"level":"vip" if lvl_clean in ["vip","lifetime"] else lvl_clean if lvl_clean!="free" else "none","verified":lvl_clean!="free","today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0}
+        if lvl_clean=="lifetime": d[uid]["expires_at"]="lifetime"
+        save(d); add_pending.pop(tid,None); bot.send_message(chat_id,f"✅ ADD {uid} as {lvl_clean}"); return
     if tid in broadcast_data:
-        target=broadcast_data.get(tid); tval=target["target"] if isinstance(target,dict) else target if isinstance(target,str) else "ALL"
+        target=broadcast_data.get(tid); tval=target["target"] if isinstance(target,dict) else target
         data={"target":tval} if not isinstance(target,dict) or target.get("type")=="pending" else target
         if m.content_type=="photo": data["type"]="photo"; data["file_id"]=m.photo[-1].file_id; data["caption"]=m.caption or ""
         elif m.content_type=="video": data["type"]="video"; data["file_id"]=m.video.file_id; data["caption"]=m.caption or ""
-        elif m.content_type=="document": data["type"]="document"; data["file_id"]=m.document.file_id; data["caption"]=m.caption or ""
-        elif m.content_type=="animation": data["type"]="animation"; data["file_id"]=m.animation.file_id; data["caption"]=m.caption or ""
-        else: data["type"]="text"; data["text"]=m.text or ""; data["caption"]=m.text or ""
+        else: data["type"]="text"; data["text"]=m.text or ""
         data["target"]=tval; broadcast_data[tid]=data
-        k=types.InlineKeyboardMarkup(row_width=2)
-        k.add(types.InlineKeyboardButton("♾️ No Delete",callback_data="del_none"))
-        k.add(types.InlineKeyboardButton("🗓️ 1 Week",callback_data="del_7"),types.InlineKeyboardButton("📅 1 Month",callback_data="del_30"))
-        k.add(types.InlineKeyboardButton("📆 3 Months",callback_data="del_90"),types.InlineKeyboardButton("🗓️ 6 Months",callback_data="del_180"))
-        k.add(types.InlineKeyboardButton("📅 1 Year",callback_data="del_365"))
-        mm=bot.send_message(chat_id,f"✅ Saved Type:{data['type']} Target:{data['target']}\n⏰ When to delete?",reply_markup=k); store_and_cleanup(chat_id,mm.message_id); return
-
+        k=types.InlineKeyboardMarkup(); k.add(types.InlineKeyboardButton("♾️ No Delete",callback_data="del_none")); k.add(types.InlineKeyboardButton("1 Week",callback_data="del_7")); k.add(types.InlineKeyboardButton("1 Month",callback_data="del_30"))
+        bot.send_message(chat_id,f"✅ Saved Target:{tval} When delete?",reply_markup=k); return
 @bot.message_handler(commands=["adduser"])
 def admin_cmds(m):
     if str(m.from_user.id)!=OWNER: return
     chat_id=m.chat.id; a=m.text.split()
     d=load_db(); mp={"free":0,"starter":20,"pro":50,"vip":100,"lifetime":1000}
-    reply_uid=str(m.reply_to_message.from_user.id) if m.reply_to_message and m.reply_to_message.from_user else None
-    if len(a)<3 and not reply_uid: mm=bot.send_message(chat_id,"📌 /adduser ID LEVEL"); store_and_cleanup(chat_id,mm.message_id); return
-    lvl=None; days=None; uids=[]
-    if reply_uid:
-        if len(a)>=2: lvl=a[1].lower().strip()
-        if len(a)>=3:
-            try: days=int(a[2])
-            except: days=None
-        uids=[reply_uid]
-    else:
-        raw_uids=a[1].replace(","," ").split()
-        for u in raw_uids:
-            clean=u.strip().replace("@","")
-            if clean.isdigit(): uids.append(clean)
-        if len(a)>=3: lvl=a[2].lower().strip()
-        if len(a)>=4:
-            try: days=int(a[3])
-            except: days=None
-    if not uids or not lvl or lvl not in mp: mm=bot.send_message(chat_id,"❌ Invalid!"); store_and_cleanup(chat_id,mm.message_id); return
-    added=[]
+    if len(a)<3: bot.send_message(chat_id,"/adduser ID LEVEL"); return
+    raw_uids=a[1].replace(","," ").split(); uids=[u.strip() for u in raw_uids if u.strip().isdigit()]
+    lvl=a[2].lower().strip()
+    if lvl not in mp: bot.send_message(chat_id,"Bad level"); return
     for uid in uids:
-        final_level="none" if lvl=="free" else ("vip" if lvl=="lifetime" else lvl); verified=lvl!="free"
-        d[uid]={"total":mp[lvl],"level":final_level,"verified":verified,"today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0}
-        if lvl=="free": d[uid]["level"]="none"
-        if days: d[uid]["expires_at"]=(datetime.now()+timedelta(days=days)).isoformat()
-        elif lvl=="lifetime": d[uid]["expires_at"]="lifetime"
-        added.append(uid)
-    save(d); mm=bot.send_message(chat_id,f"✅ ADDED {len(added)} as {lvl.upper()} IDs: {', '.join(added)}"); store_and_cleanup(chat_id,mm.message_id)
-
+        d[uid]={"total":mp[lvl],"level":"vip" if lvl in ["vip","lifetime"] else lvl if lvl!="free" else "none","verified":lvl!="free","today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0}
+    save(d); bot.send_message(chat_id,f"✅ Added {uids} as {lvl}")
 @bot.message_handler(func=lambda m: True)
 def text_handler(m):
     chat_id=m.chat.id; uid=str(m.from_user.id); txt=(m.text or "").strip()
     if not txt or txt.startswith("/"): return
     ensure(uid); lvl=get_lvl(uid)
-    if txt in ["🚀 Get Signal 🔥","Get Signal","/getsignal"]:
+    if "Get Signal" in txt:
         k=types.InlineKeyboardMarkup(row_width=2); k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("📊 OTC 30",callback_data="m_otc"))
         mm=bot.send_message(chat_id,"🔥 Select Market:",reply_markup=k); store_and_cleanup(chat_id,mm.message_id); return
-    if txt in ["💰 Deposit","Deposit"]:
+    if "Deposit" in txt:
         k=types.InlineKeyboardMarkup(); k.add(types.InlineKeyboardButton("💰 Deposit",url=LINK+"?click_id="+uid))
-        mm=bot.send_message(chat_id,f"💰 DEPOSIT {LINK}?click_id={uid}",reply_markup=k); store_and_cleanup(chat_id,mm.message_id); return
-    if txt in ["❓ How","How"]: mm=bot.send_message(chat_id,"❓ Register via link with?click_id=YOUR_ID"); store_and_cleanup(chat_id,mm.message_id); return
-    if txt in ["👤 Status","Status"]:
+        mm=bot.send_message(chat_id,f"💰 DEPOSIT {LINK}?click_id={uid}\n💵 Total counted: Sums all deposits!",reply_markup=k); store_and_cleanup(chat_id,mm.message_id); return
+    if "Status" in txt:
         u=ensure(uid)
         if lvl=="vip": lim_txt="♾️ Unlimited up to 87% WR"
         elif lvl=="pro": lim_txt="100/day 70-85% WR"
         elif lvl=="starter": lim_txt="20/day 60-70% WR"
         else: lim_txt="5/day"
-        mm=bot.send_message(chat_id,f"👤 ID:{uid}\n👑 Level:{lvl.upper()}\n💰 Deposit:${u.get('total',0)}\n📊 Today:{u.get('today',0)}/{lim_txt}\n🏆 W/L: {u.get('today_wins',0)}W-{u.get('today_losses',0)}L Today | {u.get('wins',0)}W-{u.get('losses',0)}L Total\n🔥 Streak: {u.get('win_streak',0)}W {u.get('loss_streak',0)}L"); store_and_cleanup(chat_id,mm.message_id); return
-    if txt in ["📞 Support","Support"]: mm=bot.send_message(chat_id,"📞 Support @YourSupport"); store_and_cleanup(chat_id,mm.message_id); return
-    if txt in ["🚀 Upgrade","Upgrade"]:
-        u=ensure(uid); txt_upgrade=f"🚀 UPGRADE {lvl.upper()} 👑\nDeposit: ${u.get('total',0)}\nFREE 5/day\nSTARTER $20 20/day\nPRO $50 100/day\nVIP $100 ♾️ 87%"
-        k=types.InlineKeyboardMarkup(); k.add(types.InlineKeyboardButton("⭐ STARTER $20",url=LINK+"?click_id="+uid)); k.add(types.InlineKeyboardButton("💎 PRO $50",url=LINK+"?click_id="+uid)); k.add(types.InlineKeyboardButton("👑 VIP $100",url=LINK+"?click_id="+uid))
-        mm=bot.send_message(chat_id,txt_upgrade,reply_markup=k); store_and_cleanup(chat_id,mm.message_id); return
-    if txt in ["👑 Admin","Admin"] and uid==OWNER:
-        k2=types.InlineKeyboardMarkup(row_width=2)
-        k2.add(types.InlineKeyboardButton("➕ Add User 👑 TOP",callback_data="ad_adduser"))
-        k2.add(types.InlineKeyboardButton("👥 Users",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
-        k2.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
-        k2.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
-        k2.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
-        mm=bot.send_message(chat_id,f"👑 ADMIN V12.6.2.1 Owner {OWNER}\n👥 Users {len(load_db())}",reply_markup=k2); store_and_cleanup(chat_id,mm.message_id); return@bot.callback_query_handler(func=lambda c: True)
+        mm=bot.send_message(chat_id,f"👤 ID:{uid}\n👑 Level:{lvl.upper()}\n💰 Total Deposit: ${u.get('total',0)} (SUMS ALL)\n📊 Today:{u.get('today',0)}/{lim_txt}\n🏆 W/L: {u.get('today_wins',0)}W-{u.get('today_losses',0)}L Today | {u.get('wins',0)}W-{u.get('losses',0)}L Total\n🔥 Streak: {u.get('win_streak',0)}W {u.get('loss_streak',0)}L"); store_and_cleanup(chat_id,mm.message_id); return
+    if "How" in txt:
+        mm=bot.send_message(chat_id,"❓ Register with link?click_id=YOUR_ID, Deposit, Sums total, Auto upgrade!"); store_and_cleanup(chat_id,mm.message_id); return
+    if "Support" in txt:
+        mm=bot.send_message(chat_id,"📞 Support @YourSupport"); store_and_cleanup(chat_id,mm.message_id); return
+    if "Upgrade" in txt:
+        u=ensure(uid); dep=u.get('total',0)
+        need20=max(0,20-dep); need50=max(0,50-dep); need100=max(0,100-dep)
+        if lvl=="vip":
+            txt_up=f"👑 YOU ARE VIP ALREADY! ♾️\n💰 Total Deposit: ${dep} (SUMS ALL)\n📊 ♾️ Unlimited 80-87% WR 🔥\n🏆 Best level unlocked!\nKeep trading boss!"
+        else:
+            txt_up=f"🚀 UPGRADE YOUR LEVEL {lvl.upper()} 👑\n💰 Your TOTAL Deposit: ${dep} (SUMS ALL DEPOSITS!)\n💪 Every deposit adds up!\n\n🆓 FREE: 5/day 55-65% WR\n\n⭐ STARTER $20: 20/day 60-70% WR\n💵 Need ${need20} more to unlock! 🔥\nTotal $20 unlocks\n\n💎 PRO $50: 100/day 70-85% WR\n💵 Need ${need50} more! 🚀\nTotal $50 unlocks - 5x more signals!\n\n👑 VIP $100: ♾️ Unlimited 80-87% WR 🔥 BEST!\n💵 Need ${need100} more! 💎\nTotal $100 = VIP FOREVER!\n\n💡 Example: You deposit $10 + $15 + $30 = $55 = PRO unlocked!\n💰 Deposits SUM = No loss!\n🎯 Higher level = More WINS!"
+        k=types.InlineKeyboardMarkup()
+        k.add(types.InlineKeyboardButton(f"⭐ STARTER Need ${need20}",url=LINK+"?click_id="+uid))
+        k.add(types.InlineKeyboardButton(f"💎 PRO Need ${need50}",url=LINK+"?click_id="+uid))
+        k.add(types.InlineKeyboardButton(f"👑 VIP Need ${need100} BEST!",url=LINK+"?click_id="+uid))
+        mm=bot.send_message(chat_id,txt_up,reply_markup=k); store_and_cleanup(chat_id,mm.message_id); return
+    if "Admin" in txt and uid==OWNER:
+        k2=types.InlineKeyboardMarkup(row_width=2); k2.add(types.InlineKeyboardButton("➕ Add User",callback_data="ad_adduser")); k2.add(types.InlineKeyboardButton("Users",callback_data="ad_users")); k2.add(types.InlineKeyboardButton("Broadcast",callback_data="ad_broad"))
+        mm=bot.send_message(chat_id,f"ADMIN Users {len(load_db())}",reply_markup=k2); store_and_cleanup(chat_id,mm.message_id); return@bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     try:
         bot.answer_callback_query(c.id)
@@ -289,20 +254,9 @@ def cb(c):
                 mm=bot.send_message(chat_id,"➕ SELECT LEVEL:",reply_markup=kb); store_and_cleanup(chat_id,mm.message_id); return
             if data=="ad_stats": dd=load_db(); tot=sum(u.get('total',0) for u in dd.values()); ver=sum(1 for u in dd.values() if u.get('verified')); mm=bot.send_message(chat_id,f"📊 U:{len(dd)} V:{ver} ${tot}"); store_and_cleanup(chat_id,mm.message_id); return
             if data=="ad_wr": adm=load_admin(); mm=bot.send_message(chat_id,f"🏆 WR ✅ {adm.get('total_wins',0)} ❌ {adm.get('total_losses',0)}"); store_and_cleanup(chat_id,mm.message_id); return
-            if data=="ad_deps":
-                dd=load_db(); txt="💰 Deposits:\n"
-                for uid,u in dd.items():
-                    if u.get('total',0)>0: txt+=f"{uid} ${u.get('total')}\n"
-                mm=bot.send_message(chat_id,txt or "None"); store_and_cleanup(chat_id,mm.message_id); return
-            if data=="ad_reset":
-                dd=load_db()
-                for u in dd.values(): u["today"]=0; u["wins"]=0; u["losses"]=0; u["win_streak"]=0; u["loss_streak"]=0; u["today_wins"]=0; u["today_losses"]=0; u["date"]=str(date.today())
-                save(dd); mm=bot.send_message(chat_id,"🔄 Reset Done!"); store_and_cleanup(chat_id,mm.message_id); return
             if data=="ad_broad":
                 kb=types.InlineKeyboardMarkup(row_width=2); kb.add(types.InlineKeyboardButton("📢 ALL",callback_data="broad_ALL")); kb.add(types.InlineKeyboardButton("🆓 FREE",callback_data="broad_FREE")); kb.add(types.InlineKeyboardButton("⭐ STARTER",callback_data="broad_STARTER")); kb.add(types.InlineKeyboardButton("💎 PRO",callback_data="broad_PRO")); kb.add(types.InlineKeyboardButton("👑 VIP",callback_data="broad_VIP")); kb.add(types.InlineKeyboardButton("💰 ALL VIPs",callback_data="broad_ALLVIP"))
                 mm=bot.send_message(chat_id,"🎯 Select target:",reply_markup=kb); store_and_cleanup(chat_id,mm.message_id); return
-            if data=="ad_ban": mm=bot.send_message(chat_id,"🚫 /ban ID /unban ID"); store_and_cleanup(chat_id,mm.message_id); return
-            if data=="ad_sec": mm=bot.send_message(chat_id,"🔒 Log empty"); store_and_cleanup(chat_id,mm.message_id); return
         if tid==OWNER and data.startswith("addlvl_"): level=data.replace("addlvl_",""); add_pending[tid]=level; mm=bot.send_message(chat_id,f"✅ Level {level.upper()} selected!\nSEND User ID:\n/cancel to exit"); store_and_cleanup(chat_id,mm.message_id); return
         if tid==OWNER and data.startswith("broad_"): target=data.replace("broad_",""); broadcast_data[tid]={"target":target,"type":"pending"}; mm=bot.send_message(chat_id,f"🎯 Target {target} ✅\nSEND broadcast msg:\n/cancel to exit"); store_and_cleanup(chat_id,mm.message_id); return
         if tid==OWNER and data.startswith("del_"):
