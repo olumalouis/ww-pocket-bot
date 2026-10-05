@@ -116,15 +116,14 @@ def signal_keyboard():
     return k
 
 @app.route('/')
-def home(): return "Bot Running V11.1 Fixed 🔥"
+def home(): return "Bot Running V11.1 Top AddUser"
 
 @bot.message_handler(commands=["start","clearme","cancel"])
 def start_cmd(m):
     chat_id=m.chat.id;uid=str(m.from_user.id)
-    # FIX: clear stuck broadcast state
     if uid==OWNER and m.text.startswith("/cancel"):
         broadcast_data.pop(uid,None); add_pending.pop(uid,None)
-        bot.send_message(chat_id,"✅ Cancelled broadcast/add - Now try /start"); return
+        bot.send_message(chat_id,"✅ Cancelled - Now /start"); return
     if m.text.startswith("/clearme") and uid!=OWNER: return
     if m.text.startswith("/clearme"):
         if chat_id in msg_hist:
@@ -175,7 +174,7 @@ def owner_pending_handler(m):
         k.add(types.InlineKeyboardButton("🗓️ 1 Week",callback_data="del_7"),types.InlineKeyboardButton("📅 1 Month",callback_data="del_30"))
         k.add(types.InlineKeyboardButton("📆 3 Months",callback_data="del_90"),types.InlineKeyboardButton("🗓️ 6 Months",callback_data="del_180"))
         k.add(types.InlineKeyboardButton("📅 1 Year",callback_data="del_365"))
-        mm=bot.send_message(chat_id,f"✅ Saved Type:{data['type']} Target:{data['target']}\n\n⏰ When to delete BROADCAST from users?",reply_markup=k)
+        mm=bot.send_message(chat_id,f"✅ Saved Type:{data['type']} Target:{data['target']}\n\n⏰ When to delete?",reply_markup=k)
         store_and_cleanup(chat_id, mm.message_id); return
 
 @bot.message_handler(commands=["adduser","broadcast","ban","unban"])
@@ -185,7 +184,7 @@ def admin_cmds(m):
     cmd=a[0].replace("/","").split("@")[0] if a else ""
     if cmd=="adduser":
         if len(a)<3:
-            mm=bot.send_message(chat_id,"❌ /adduser ID LEVEL\nEx: /adduser 123456 VIP"); store_and_cleanup(chat_id, mm.message_id); return
+            mm=bot.send_message(chat_id,"❌ /adduser ID LEVEL"); store_and_cleanup(chat_id, mm.message_id); return
         uid=a[1].strip().replace("@","");lvl=a[2].lower().strip();days=None
         if len(a)>=4:
             try: days=int(a[3])
@@ -206,7 +205,6 @@ def text_handler(m):
     chat_id=m.chat.id;uid=str(m.from_user.id);txt=(m.text or "").strip()
     if not txt: return
     if txt.startswith("/"): return
-    # FIX: always ensure user exists - this was causing not replying
     ensure(uid)
     lvl=get_lvl(uid)
     if txt in ["🚀 Get Signal 🔥","Get Signal","/getsignal","Get Signal 🔥"]:
@@ -236,13 +234,17 @@ def text_handler(m):
         mm=bot.send_message(chat_id,f"🚀 UPGRADE Level:{lvl.upper()} Deposit:${u.get('total',0)}",reply_markup=k)
         store_and_cleanup(chat_id, mm.message_id);return
     if txt in ["👑 Admin","Admin"] and uid==OWNER:
-        k=types.InlineKeyboardMarkup(row_width=2)
-        k.add(types.InlineKeyboardButton("👥 Users",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
-        k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
-        k.add(types.InlineKeyboardButton("➕ Add User 👑",callback_data="ad_adduser"))
-        k.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
-        k.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
-        mm=bot.send_message(chat_id,f"👑 ADMIN V11.1 👑\n👥 Users {len(load_db())}",reply_markup=k)
+        k=types.InlineKeyboardMarkup(row_width=1)
+        k.add(types.InlineKeyboardButton("➕ Add User 👑 TOP",callback_data="ad_adduser"))
+        k.add(types.InlineKeyboardButton("👥 Users | 📊 Stats",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
+        # FIXED - Add User on TOP
+        k2=types.InlineKeyboardMarkup(row_width=2)
+        k2.add(types.InlineKeyboardButton("➕ Add User 👑",callback_data="ad_adduser"))
+        k2.add(types.InlineKeyboardButton("👥 Users",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
+        k2.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
+        k2.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
+        k2.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
+        mm=bot.send_message(chat_id,f"👑 ADMIN V11.2 TOP AddUser 👑\n👥 Users {len(load_db())}",reply_markup=k2)
         store_and_cleanup(chat_id, mm.message_id); return@bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     try:
@@ -288,13 +290,13 @@ def cb(c):
                 mm=bot.send_message(chat_id, msg, reply_markup=signal_keyboard())
                 store_and_cleanup(chat_id, mm.message_id); return
         if data=="admin" and tid==OWNER:
-            k=types.InlineKeyboardMarkup(row_width=2)
-            k.add(types.InlineKeyboardButton("👥 Users",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
-            k.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
-            k.add(types.InlineKeyboardButton("➕ Add User 👑",callback_data="ad_adduser"))
-            k.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
-            k.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
-            mm=bot.send_message(chat_id,f"👑 ADMIN V11.1 👑\n👥 Users {len(load_db())}",reply_markup=k)
+            k2=types.InlineKeyboardMarkup(row_width=2)
+            k2.add(types.InlineKeyboardButton("➕ Add User 👑",callback_data="ad_adduser"))
+            k2.add(types.InlineKeyboardButton("👥 Users",callback_data="ad_users"),types.InlineKeyboardButton("📊 Stats",callback_data="ad_stats"))
+            k2.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
+            k2.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
+            k2.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
+            mm=bot.send_message(chat_id,f"👑 ADMIN V11.2 TOP AddUser 👑\n👥 Users {len(load_db())}",reply_markup=k2)
             store_and_cleanup(chat_id, mm.message_id); return
         if tid==OWNER and data.startswith("ad_"):
             if data=="ad_users":
@@ -308,7 +310,7 @@ def cb(c):
                 kb.add(types.InlineKeyboardButton("💎 PRO",callback_data="addlvl_pro"))
                 kb.add(types.InlineKeyboardButton("👑 VIP",callback_data="addlvl_vip"))
                 kb.add(types.InlineKeyboardButton("💎 LIFETIME ♾️",callback_data="addlvl_lifetime"))
-                mm=bot.send_message(chat_id,"➕ SELECT LEVEL:",reply_markup=kb); store_and_cleanup(chat_id, mm.message_id); return
+                mm=bot.send_message(chat_id,"➕ SELECT LEVEL - Add User:",reply_markup=kb); store_and_cleanup(chat_id, mm.message_id); return
             if data=="ad_stats":
                 dd=load_db();tot=sum(u.get('total',0) for u in dd.values());ver=sum(1 for u in dd.values() if u.get('verified'))
                 mm=bot.send_message(chat_id,f"📊 U:{len(dd)} V:{ver} ${tot}"); store_and_cleanup(chat_id, mm.message_id); return
