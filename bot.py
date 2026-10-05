@@ -26,15 +26,21 @@ def ensure_user(uid, name):
 
 def get_level(uid):
     dep=users[uid].get("deposit",0)
-    if dep>=100: return "VIP"
-    if dep>=50: return "PRO"
-    if dep>=20: return "STARTER"
+    if dep>=100:
+        return "VIP"
+    if dep>=50:
+        return "PRO"
+    if dep>=20:
+        return "STARTER"
     return "NONE"
 
 def get_limit(level):
-    if level=="VIP": return 1000000
-    if level=="PRO": return 100
-    if level=="STARTER": return 20
+    if level=="VIP":
+        return 1000000
+    if level=="PRO":
+        return 100
+    if level=="STARTER":
+        return 20
     return 5
 
 def check_daily(uid):
@@ -58,7 +64,8 @@ def main_menu():
     return markup
 
 def track_msg(chat_id, msg):
-    if chat_id not in last_bot_msgs: last_bot_msgs[chat_id]=[]
+    if chat_id not in last_bot_msgs:
+        last_bot_msgs[chat_id]=[]
     last_bot_msgs[chat_id].append(msg.message_id)
     if len(last_bot_msgs[chat_id])>10:
         last_bot_msgs[chat_id]=last_bot_msgs[chat_id][-10:]
@@ -66,44 +73,56 @@ def track_msg(chat_id, msg):
 def clean_and_track(chat_id, uid):
     if chat_id in last_bot_msgs:
         for mid in last_bot_msgs[chat_id]:
-            try: bot.delete_message(chat_id, mid)
-            except: pass
+            try:
+                bot.delete_message(chat_id, mid)
+            except:
+                pass
         last_bot_msgs[chat_id]=[]@bot.message_handler(content_types=['text','photo','video','document','audio','voice','sticker','animation','video_note','location','contact','poll','venue','dice','game'], func=lambda m: broadcast_wait.get(m.from_user.id) is not None or users.get(m.from_user.id,{}).get("bcast_wait") is not None)
 def handle_bcast(m):
     uid=m.from_user.id
     wait=broadcast_wait.get(uid) or users.get(uid,{}).get("bcast_wait")
-    if not wait: return
-    if uid!=OWNER_ID: return
+    if not wait:
+        return
+    if uid!=OWNER_ID:
+        return
     hours=wait["hours"]
     target=wait["target"]
     sent=[]
     count=0
     failed=0
     for u_id in list(users.keys()):
-        if u_id==OWNER_ID: continue
+        if u_id==OWNER_ID:
+            continue
         lvl=get_level(u_id)
-        if target!="ALL" and lvl!=target: continue
-        if users[u_id].get("banned"): continue
+        if target!="ALL" and lvl!=target:
+            continue
+        if users[u_id].get("banned"):
+            continue
         try:
             if m.content_type=='text':
                 msg=bot.send_message(u_id, f"📢 ADMIN:\n\n{m.text}")
             else:
                 msg=bot.copy_message(u_id, m.chat.id, m.message_id)
-            if hours>0: sent.append((u_id, msg.message_id))
+            if hours>0:
+                sent.append((u_id, msg.message_id))
             count+=1
         except:
             failed+=1
             pass
-    if uid in broadcast_wait: del broadcast_wait[uid]
-    if uid in users and users[uid].get("bcast_wait"): users[uid]["bcast_wait"]=None
+    if uid in broadcast_wait:
+        del broadcast_wait[uid]
+    if uid in users and users[uid].get("bcast_wait"):
+        users[uid]["bcast_wait"]=None
     msg_confirm=bot.send_message(uid, f"✅ BROADCAST DONE\n📁 Type: {m.content_type}\n👥 Target: {target}\n✅ Sent: {count}\n❌ Failed: {failed}\n⏰ Delete: {hours}h", reply_markup=main_menu())
     track_msg(uid, msg_confirm)
     if hours>0 and sent:
         def auto_del():
             time.sleep(hours*3600)
             for cid,mid in sent:
-                try: bot.delete_message(cid,mid)
-                except: pass
+                try:
+                    bot.delete_message(cid,mid)
+                except:
+                    pass
         threading.Thread(target=auto_del, daemon=True).start()
 
 @bot.message_handler(func=lambda m: True, content_types=['text'])
@@ -113,11 +132,14 @@ def text_buttons(m):
     txt_up=txt.upper()
     if broadcast_wait.get(uid) or users.get(uid,{}).get("bcast_wait"):
         if any(k in txt_up for k in ["GET SIGNAL","REAL 15","OTC 30","UPGRADE","DEPOSIT","MY STATUS","HOW IT WORKS","ADMIN PANEL","/START","/ADDUSER","/BAN","/USERS","/STATS","CANCEL","GWR"]):
-            if uid in broadcast_wait: del broadcast_wait[uid]
-            if uid in users and users[uid].get("bcast_wait"): users[uid]["bcast_wait"]=None
+            if uid in broadcast_wait:
+                del broadcast_wait[uid]
+            if uid in users and users[uid].get("bcast_wait"):
+                users[uid]["bcast_wait"]=None
         else:
             return
-    if uid not in users: ensure_user(uid, m.from_user.username or m.from_user.first_name)
+    if uid not in users:
+        ensure_user(uid, m.from_user.username or m.from_user.first_name)
     if users[uid].get("banned"):
         bot.send_message(m.chat.id, "⛔ You are banned")
         return
@@ -215,7 +237,8 @@ def callbacks(c):
     data=c.data
     chat_id=c.message.chat.id
     ensure_user(uid, c.from_user.username or c.from_user.first_name)
-    if users[uid].get("banned"): return
+    if users[uid].get("banned"):
+        return
     check_daily(uid)
     if data=="get_signal":
         clean_and_track(chat_id, uid)
@@ -235,8 +258,10 @@ def callbacks(c):
         markup.add(types.InlineKeyboardButton("✋ Manual 30", callback_data="manual_otc"), types.InlineKeyboardButton("🤖 Auto 30", callback_data="auto_otc"))
         msg=bot.send_message(chat_id, "🔶 OTC 30 Market:", reply_markup=markup)
         track_msg(chat_id, msg)
-    elif data=="manual_real": send_pairs(chat_id, "real", 0)
-    elif data=="manual_otc": send_pairs(chat_id, "otc", 0)
+    elif data=="manual_real":
+        send_pairs(chat_id, "real", 0)
+    elif data=="manual_otc":
+        send_pairs(chat_id, "otc", 0)
     elif data.startswith("pairs_"):
         _, typ, page = data.split("_")
         send_pairs(chat_id, typ, int(page))
@@ -285,10 +310,13 @@ f"☕ TAKE BREAK 30-60 min! Don't revenge trade!\n📊 Daily W:{users[uid]['wins
             txt=f"💔 LOSS {ls}/5 — {words[0]} • {words[1]} • {words[2]}\n\n🔥 One loss doesn't define you! Next is WIN!\n📊 Daily W:{users[uid]['wins']} L:{users[uid]['losses']}"
         msg=bot.send_message(chat_id, txt, reply_markup=main_menu())
         track_msg(chat_id, msg)
-    elif data=="admin_users": admin_cmd(c.message, True)
-    elif data=="admin_stats": admin_cmd(c.message, True, True)
+    elif data=="admin_users":
+        admin_cmd(c.message, True)
+    elif data=="admin_stats":
+        admin_cmd(c.message, True, True)
     elif data=="admin_gwr":
-        if uid!=OWNER_ID: return
+        if uid!=OWNER_ID:
+            return
         total_gwr_w=0
         total_gwr_l=0
         for u in users.values():
@@ -299,7 +327,8 @@ f"☕ TAKE BREAK 30-60 min! Don't revenge trade!\n📊 Daily W:{users[uid]['wins
         msg=bot.send_message(chat_id, f"🏆 GLOBAL WIN RATE (GWR) - NEVER RESET\n\n✅ Total Wins: {total_gwr_w}\n❌ Total Losses: {total_gwr_l}\n📊 Total Trades: {total}\n🔥 Global WR: {wr}%\n\n📈 Daily W/L resets 00:00 UTC\n🏆 GWR never resets", reply_markup=main_menu())
         track_msg(chat_id, msg)
     elif data=="admin_daily":
-        if uid!=OWNER_ID: return
+        if uid!=OWNER_ID:
+            return
         total_w=0
         total_l=0
         for u in users.values():
@@ -307,15 +336,20 @@ f"☕ TAKE BREAK 30-60 min! Don't revenge trade!\n📊 Daily W:{users[uid]['wins
             total_l+=u.get("losses",0)
         msg=bot.send_message(chat_id, f"📈 DAILY STATS - RESETS 00:00 UTC\n\n✅ Wins Today: {total_w}\n❌ Losses Today: {total_l}\n📊 Trades Today: {total_w+total_l}", reply_markup=main_menu())
         track_msg(chat_id, msg)
-    elif data=="admin_adduser": bot.send_message(chat_id, "Use: /adduser 123456 50")
-    elif data=="admin_search": bot.send_message(chat_id, "Use: /such 123456")
-    elif data=="admin_ban": bot.send_message(chat_id, "Use: /ban 123456")
-    elif data=="admin_unban": bot.send_message(chat_id, "Use: /unban 123456")
+    elif data=="admin_adduser":
+        bot.send_message(chat_id, "Use: /adduser 123456 50")
+    elif data=="admin_search":
+        bot.send_message(chat_id, "Use: /such 123456")
+    elif data=="admin_ban":
+        bot.send_message(chat_id, "Use: /ban 123456")
+    elif data=="admin_unban":
+        bot.send_message(chat_id, "Use: /unban 123456")
     elif data=="howitworks":
         msg=bot.send_message(chat_id, "📜 How it Works:\n1️⃣ Register\n2️⃣ 5/day FREE\n3️⃣ Deposit upgrade\n4️⃣ Status shows Daily W/L only\n5️⃣ Resets 00:00 UTC\n6️⃣ GWR never resets", reply_markup=main_menu())
         track_msg(chat_id, msg)
     elif data=="admin_broadcast":
-        if uid!=OWNER_ID: return
+        if uid!=OWNER_ID:
+            return
         markup=types.InlineKeyboardMarkup(row_width=3)
         markup.add(types.InlineKeyboardButton("📅 1 Day", callback_data="bdel_24"), types.InlineKeyboardButton("📅 1 Week", callback_data="bdel_168"), types.InlineKeyboardButton("📅 1 Month", callback_data="bdel_720"))
         markup.add(types.InlineKeyboardButton("📅 3 Months", callback_data="bdel_2160"), types.InlineKeyboardButton("📅 6 Months", callback_data="bdel_4320"), types.InlineKeyboardButton("📅 1 Year", callback_data="bdel_8760"))
@@ -323,7 +357,8 @@ f"☕ TAKE BREAK 30-60 min! Don't revenge trade!\n📊 Daily W:{users[uid]['wins
         msg=bot.send_message(chat_id, "⏰ SELECTOR 1/2 - DELETE PERIOD:", reply_markup=markup)
         track_msg(chat_id, msg)
     elif data.startswith("bdel_"):
-        if uid!=OWNER_ID: return
+        if uid!=OWNER_ID:
+            return
         hours=int(data.split("_")[1])
         markup=types.InlineKeyboardMarkup(row_width=3)
         markup.add(types.InlineKeyboardButton("ALL", callback_data=f"bcast_{hours}_ALL"), types.InlineKeyboardButton("NONE", callback_data=f"bcast_{hours}_NONE"), types.InlineKeyboardButton("STARTER", callback_data=f"bcast_{hours}_STARTER"))
@@ -331,13 +366,13 @@ f"☕ TAKE BREAK 30-60 min! Don't revenge trade!\n📊 Daily W:{users[uid]['wins
         msg=bot.send_message(chat_id, f"✅ Delete {hours}h set\n👥 SELECTOR 2/2 - TARGET:", reply_markup=markup)
         track_msg(chat_id, msg)
     elif data.startswith("bcast_"):
-        if uid!=OWNER_ID: return
+        if uid!=OWNER_ID:
+            return
         _, hours, target = data.split("_")
         broadcast_wait[uid]={"hours":int(hours),"target":target}
         users[uid]["bcast_wait"]={"hours":int(hours),"target":target}
         msg=bot.send_message(chat_id, f"✍️ DONE: Delete {hours}h | Target {target}\nNow send ANY file - ALL SUPPORTED!", reply_markup=main_menu())
-        track_msg(chat_id, msg)
-        def send_pairs(chat_id, typ, page):
+        track_msg(chat_id, msg)def send_pairs(chat_id, typ, page):
     plist=pairs_real if typ=="real" else pairs_otc
     per=10
     start=page*per
@@ -346,9 +381,12 @@ f"☕ TAKE BREAK 30-60 min! Don't revenge trade!\n📊 Daily W:{users[uid]['wins
     for p in plist[start:end]:
         markup.add(types.InlineKeyboardButton(p, callback_data=f"pair_{typ}_{p.replace('/','_')}"))
     nav=[]
-    if page>0: nav.append(types.InlineKeyboardButton("⬅️ Prev", callback_data=f"pairs_{typ}_{page-1}"))
-    if end<len(plist): nav.append(types.InlineKeyboardButton("Next ➡️", callback_data=f"pairs_{typ}_{page+1}"))
-    if nav: markup.row(*nav)
+    if page>0:
+        nav.append(types.InlineKeyboardButton("⬅️ Prev", callback_data=f"pairs_{typ}_{page-1}"))
+    if end<len(plist):
+        nav.append(types.InlineKeyboardButton("Next ➡️", callback_data=f"pairs_{typ}_{page+1}"))
+    if nav:
+        markup.row(*nav)
     msg=bot.send_message(chat_id, f"📊 {typ.upper()} Pairs - Page {page+1}:", reply_markup=markup)
     track_msg(chat_id, msg)
 
@@ -383,7 +421,8 @@ f"📊 Left Today: {users[uid]['limit']-users[uid]['used']}"
 
 def admin_cmd(m, is_callback=False, is_stats=False):
     uid=m.from_user.id if not is_callback else m.chat.id
-    if uid!=OWNER_ID: return
+    if uid!=OWNER_ID:
+        return
     txt=m.text or ""
     txt_up=txt.upper()
     if txt_up.startswith('/ADDUSER') or (is_callback and not is_stats):
@@ -435,7 +474,8 @@ def admin_cmd(m, is_callback=False, is_stats=False):
         except:
             bot.send_message(m.chat.id, "Invalid ID")
             return
-        if tid not in users: ensure_user(tid, f"User{tid}")
+        if tid not in users:
+            ensure_user(tid, f"User{tid}")
         users[tid]["banned"]=True
         bot.send_message(m.chat.id, f"⛔ Banned {tid}")
         return
@@ -449,7 +489,8 @@ def admin_cmd(m, is_callback=False, is_stats=False):
         except:
             bot.send_message(m.chat.id, "Invalid ID")
             return
-        if tid in users: users[tid]["banned"]=False
+        if tid in users:
+            users[tid]["banned"]=False
         bot.send_message(m.chat.id, f"✅ Unbanned {tid}")
         return
     if txt_up.startswith('/USERS') or (is_callback and not is_stats):
@@ -477,8 +518,10 @@ def start_cmd(m):
     uid=m.from_user.id
     ensure_user(uid, m.from_user.username or m.from_user.first_name)
     check_daily(uid)
-    if uid in broadcast_wait: del broadcast_wait[uid]
-    if users[uid].get("bcast_wait"): users[uid]["bcast_wait"]=None
+    if uid in broadcast_wait:
+        del broadcast_wait[uid]
+    if users[uid].get("bcast_wait"):
+        users[uid]["bcast_wait"]=None
     lvl=get_level(uid)
     msg=bot.send_message(m.chat.id, f"👋 Welcome {m.from_user.first_name}!\n\n🔥 Level: {lvl}\n📊 Limit: {users[uid]['limit']}/day\n\n📊 GET SIGNAL to start trading!", reply_markup=main_menu())
     track_msg(m.chat.id, msg)
@@ -487,5 +530,5 @@ def start_cmd(m):
 def admin_commands(m):
     admin_cmd(m)
 
-print("Bot V13.6 FINAL - OWNER 8188622130 - ALL FEATURES KEPT - VIP CONGRATS")
+print("Bot V13.6 FINAL - OWNER 8188622130")
 bot.infinity_polling()
