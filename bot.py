@@ -243,8 +243,7 @@ def text_handler(m):
         k.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
         k.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
         mm=bot.send_message(chat_id,f"👑 ADMIN V11.1 👑\n👥 Users {len(load_db())}",reply_markup=k)
-        store_and_cleanup(chat_id, mm.message_id); return
-        @bot.callback_query_handler(func=lambda c: True)
+        store_and_cleanup(chat_id, mm.message_id); return@bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     try:
         bot.answer_callback_query(c.id)
