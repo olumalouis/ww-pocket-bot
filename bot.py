@@ -67,12 +67,12 @@ def main_menu():
     markup.add(types.KeyboardButton("📊 GET SIGNAL"))
     markup.add(types.KeyboardButton("💹 REAL 15"), types.KeyboardButton("🔶 OTC 30"))
     markup.add(types.KeyboardButton("💎 Upgrade"), types.KeyboardButton("💰 Deposit"))
-    markup.add(types.KeyboardButton("📈 My Status"), types.KeyboardButton("🎯 GWR"))
-    markup.add(types.KeyboardButton("📜 How it Works"), types.KeyboardButton("👑 Admin Panel"))
+    markup.add(types.KeyboardButton("📈 My Status"), types.KeyboardButton("📜 How it Works"))
+    markup.add(types.KeyboardButton("👑 Admin Panel"))
     return markup
 
 @app.route('/')
-def home(): return "V13.2.4 MOTIV UPGRADE - 3 PARTS"
+def home(): return "V13.2.6 MOTIV LIMIT"
 
 @app.route('/postback')
 def postback():
@@ -116,11 +116,12 @@ def start(m):
     else:
         used=users[uid].get("used",0)
         limit=get_limit(level)
-        msg=bot.send_message(m.chat.id, f"👋 Welcome {m.from_user.first_name}!\n👑 {level} | 🎯 {get_wr(level)} WR\n📊 {used}/{limit if limit<999999 else '∞'} Used\n🏆 Daily W:{users[uid].get('wins',0)} L:{users[uid].get('losses',0)} | GWR W:{users[uid].get('gwr_wins',0)} L:{users[uid].get('gwr_losses',0)}", reply_markup=main_menu())
+        msg=bot.send_message(m.chat.id, f"👋 Welcome {m.from_user.first_name}!\n👑 {level} | 🎯 {get_wr(level)} WR\n📊 {used}/{limit if limit<999999 else '∞'} Used Today\n🏆 Daily W:{users[uid].get('wins',0)} L:{users[uid].get('losses',0)}", reply_markup=main_menu())
         track_msg(m.chat.id, msg)@bot.message_handler(func=lambda m: True, content_types=['text'])
 def text_buttons(m):
     if users.get(m.from_user.id,{}).get("bcast_wait"): return
-    txt=m.text.strip()
+    txt=m.text or ""
+    txt_low = txt.lower()
     uid=m.from_user.id
     if uid not in users: ensure_user(uid, m.from_user.username or m.from_user.first_name)
     if users[uid].get("banned"):
@@ -128,40 +129,33 @@ def text_buttons(m):
         return
     check_daily(uid)
 
-    if "GET SIGNAL" in txt:
+    if "get signal" in txt_low:
         clean_and_track(m.chat.id, uid)
         markup=types.InlineKeyboardMarkup(row_width=2)
         markup.add(types.InlineKeyboardButton("💹 REAL 15", callback_data="real_15"), types.InlineKeyboardButton("🔶 OTC 30", callback_data="otc_30"))
         msg=bot.send_message(m.chat.id, "🔥 Select Market:", reply_markup=markup)
         track_msg(m.chat.id, msg)
-    elif "REAL 15" in txt:
+    elif "real 15" in txt_low:
         clean_and_track(m.chat.id, uid)
         markup=types.InlineKeyboardMarkup(row_width=2)
         markup.add(types.InlineKeyboardButton("✋ Manual 15", callback_data="manual_real"), types.InlineKeyboardButton("🤖 Auto", callback_data="auto_real"))
         msg=bot.send_message(m.chat.id, "💹 REAL 15 Market:", reply_markup=markup)
         track_msg(m.chat.id, msg)
-    elif "OTC 30" in txt:
+    elif "otc 30" in txt_low:
         clean_and_track(m.chat.id, uid)
         markup=types.InlineKeyboardMarkup(row_width=2)
         markup.add(types.InlineKeyboardButton("✋ Manual 30", callback_data="manual_otc"), types.InlineKeyboardButton("🤖 Auto 30", callback_data="auto_otc"))
         msg=bot.send_message(m.chat.id, "🔶 OTC 30 Market:", reply_markup=markup)
         track_msg(m.chat.id, msg)
-    elif "My Status" in txt:
+    elif "my status" in txt_low:
         level=get_level(uid)
         used=users[uid].get("used",0)
         limit=get_limit(level)
         wins=users[uid].get('wins',0)
         losses=users[uid].get('losses',0)
-        msg=bot.send_message(m.chat.id, f"👤 STATUS - DAILY (Resets 00:00)\n👑 {level} 🎯 {get_wr(level)}\n💰 ${users[uid].get('deposit',0)}\n📊 Today: {used}/{limit if limit<999999 else '∞'}\n🏆 Daily W:{wins} L:{losses}\n🔥 Streak:{users[uid].get('streak',0)} Loss Streak:{users[uid].get('loss_streak',0)}", reply_markup=main_menu())
+        msg=bot.send_message(m.chat.id, f"👤 STATUS - DAILY (Resets 00:00)\n👑 {level} 🎯 {get_wr(level)}\n💰 ${users[uid].get('deposit',0)}\n📊 Today: {used}/{limit if limit<999999 else '∞'} Used\n🏆 Daily W:{wins} L:{losses}\n🔥 Streak:{users[uid].get('streak',0)} Loss Streak:{users[uid].get('loss_streak',0)}", reply_markup=main_menu())
         track_msg(m.chat.id, msg)
-    elif "GWR" in txt:
-        gw=users[uid].get('gwr_wins',0)
-        gl=users[uid].get('gwr_losses',0)
-        total=gw+gl
-        gwr=round((gw/total*100) if total>0 else 0,1)
-        msg=bot.send_message(m.chat.id, f"🎯 GWR - LIFETIME (Never Resets)\n🏆 Total Wins: {gw}\n❌ Total Losses: {gl}\n🎯 GWR: {gwr}% ({gw}/{total})\n👑 Level {get_level(uid)}", reply_markup=main_menu())
-        track_msg(m.chat.id, msg)
-    elif "Upgrade" in txt:
+    elif "upgrade" in txt_low:
         link = f"{AFFILIATE_LINK}?subid={uid}" if "?" not in AFFILIATE_LINK else f"{AFFILIATE_LINK}&subid={uid}"
         level=get_level(uid)
         markup=types.InlineKeyboardMarkup()
@@ -184,7 +178,7 @@ f"🔗 Your personal upgrade link:\n{link}"
         )
         msg=bot.send_message(m.chat.id, upgrade_text, reply_markup=markup)
         track_msg(m.chat.id, msg)
-    elif "Deposit" in txt:
+    elif "deposit" in txt_low:
         link = f"{AFFILIATE_LINK}?subid={uid}" if "?" not in AFFILIATE_LINK else f"{AFFILIATE_LINK}&subid={uid}"
         markup=types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("💰 Deposit Now", url=link))
@@ -197,10 +191,10 @@ f"🔗 {link}"
         )
         msg=bot.send_message(m.chat.id, dep_text, reply_markup=markup)
         track_msg(m.chat.id, msg)
-    elif "How it Works" in txt:
-        msg=bot.send_message(m.chat.id, "📜 How it Works:\n1️⃣ Register\n2️⃣ 5/day FREE\n3️⃣ Deposit upgrade\n4️⃣ Status Daily\n5️⃣ GWR Lifetime", reply_markup=main_menu())
+    elif "how it works" in txt_low:
+        msg=bot.send_message(m.chat.id, "📜 How it Works:\n1️⃣ Register\n2️⃣ 5/day FREE\n3️⃣ Deposit upgrade\n4️⃣ Status Daily reset 00:00\n5️⃣ Signal limit daily reset", reply_markup=main_menu())
         track_msg(m.chat.id, msg)
-    elif "Admin Panel" in txt or txt.startswith('/admin'):
+    elif "admin panel" in txt_low or txt.startswith('/admin'):
         if uid!=OWNER_ID:
             msg=bot.send_message(m.chat.id, "⛔ Admin only")
             track_msg(m.chat.id, msg)
@@ -211,7 +205,7 @@ f"🔗 {link}"
         markup.add(types.InlineKeyboardButton("👥 Users", callback_data="admin_users"), types.InlineKeyboardButton("📊 Stats", callback_data="admin_stats"))
         markup.add(types.InlineKeyboardButton("➕ Add User", callback_data="admin_adduser"), types.InlineKeyboardButton("🔍 Search User", callback_data="admin_search"))
         markup.add(types.InlineKeyboardButton("⛔ Ban User", callback_data="admin_ban"), types.InlineKeyboardButton("✅ Unban User", callback_data="admin_unban"))
-        msg=bot.send_message(m.chat.id, f"👑 ADMIN PANEL\nTotal: {len(users)}\n✅ Motiv Upgrade + GWR removed from 6 loss", reply_markup=markup)
+        msg=bot.send_message(m.chat.id, f"👑 ADMIN PANEL\nTotal: {len(users)}\n✅ Motiv Limit + Fixed Buttons", reply_markup=markup)
         track_msg(m.chat.id, msg)
     elif txt.startswith('/users') or txt.startswith('/stats') or txt.startswith('/broadcast') or txt.startswith('/adduser') or txt.startswith('/such') or txt.startswith('/search') or txt.startswith('/find') or txt.startswith('/ban') or txt.startswith('/unban'):
         admin_cmd(m)
@@ -273,7 +267,7 @@ def callbacks(c):
         users[uid]["gwr_wins"]=users[uid].get("gwr_wins",0)+1
         users[uid]["streak"]=users[uid].get("streak",0)+1
         users[uid]["loss_streak"]=0
-        msg=bot.send_message(chat_id, f"BOOM! WIN! 🔥 Streak {users[uid]['streak']} | Daily W:{users[uid]['wins']} L:{users[uid]['losses']} | GWR {users[uid]['gwr_wins']}/{users[uid]['gwr_losses']}", reply_markup=main_menu())
+        msg=bot.send_message(chat_id, f"BOOM! WIN! 🔥 Streak {users[uid]['streak']} | Daily W:{users[uid]['wins']} L:{users[uid]['losses']}", reply_markup=main_menu())
         track_msg(chat_id, msg)
     elif data=="loss":
         users[uid]["losses"]=users[uid].get("losses",0)+1
@@ -299,7 +293,7 @@ f"🔥 Come back later and we will CRUSH it together!"
             long_motiv = [
 f"💔 LOSS {ls}/5 — BUT LISTEN {c.from_user.first_name}!\n\n💎 {w1} • {w2} • {w3} 💎\n\n🔥 One loss doesn't define you! Champions are built in moments like this! You are {w1}, you have {w2}, you need {w3} — that's the trader mindset!\n\n⚡ The market tested you, but you are still standing! The next signal is coming, and it's YOUR comeback! Don't quit now, legends never do!\n\n🏆 Daily W:{users[uid]['wins']} L:{users[uid]['losses']} — Keep fighting!",
 f"😤 Ouch! Loss {ls} — I feel you {c.from_user.first_name}!\n\n🎯 POWER WORDS: {w1} | {w2} | {w3}\n\n💪 This is where 90% give up and 10% become PRO! Which one are you? You need {w1} to control emotions, {w2} to wait for perfect entry, {w3} to execute like a beast!\n\n🚀 Take a deep breath. Reset. The market owes you NOTHING but your next WIN is loading... Your {w1} will make it happen!\n\n📊 W:{users[uid]['wins']} L:{users[uid]['losses']} — Next one is WIN!",
-f"⚠️ LOSS {ls}/5 — WAKE UP CALL!\n\n🔮 {w1} • {w2} • {w3} — Remember these 3 words!\n\n🧘 Every pro trader has been here. What separates you from losers is {w1}! Market is not against you, it's teaching you {w2} and {w3}. Learn, adapt, and strike back harder!\n\n💰 Don't trade angry. Don't trade scared. Trade with {w1} and {w2}. Your VIP signal is waiting — are you ready to dominate?\n\n🔥 Daily: W:{users[uid]['wins']} L:{users[uid]['losses']} | GWR: {users[uid]['gwr_wins']}/{users[uid]['gwr_losses']}",
+f"⚠️ LOSS {ls}/5 — WAKE UP CALL!\n\n🔮 {w1} • {w2} • {w3} — Remember these 3 words!\n\n🧘 Every pro trader has been here. What separates you from losers is {w1}! Market is not against you, it's teaching you {w2} and {w3}. Learn, adapt, and strike back harder!\n\n💰 Don't trade angry. Don't trade scared. Trade with {w1} and {w2}. Your VIP signal is waiting — are you ready to dominate?\n\n🔥 Daily: W:{users[uid]['wins']} L:{users[uid]['losses']}",
 f"💔 {ls} Losses — But Your Story Isn't Over!\n\n👑 TODAY'S CODE: {w1} - {w2} - {w3}\n\n🌟 {c.from_user.first_name}, real traders lose too! But they never lose {w1}, never lose {w2}, never lose {w3}! That's why you are here, that's why you will win! This loss is fuel, not failure!\n\n🎯 Close your eyes for 10 seconds, say '{w1} {w2} {w3}' and click Next Signal with confidence! The market respects {w1} — show it!\n\n🏆 W:{users[uid]['wins']} L:{users[uid]['losses']} — Legend mode ON!",
 f"🔥 LOSS {ls} — PAIN IS TEMPORARY!\n\n💎 {w1} 💎 {w2} 💎 {w3} 💎\n\n⚡ Hear me out {c.from_user.first_name} — You are {w1} enough to handle this! You have {w2} to stay in game! You need {w3} to win next trade! 90% traders quit at loss {ls}, but YOU are different! You are built for PRO level!\n\n🚀 Shake it off! The next candle is yours! Let's turn this red into GREEN!\n\n📈 Daily W:{users[uid]['wins']} L:{users[uid]['losses']} — BOUNCE BACK TIME!"
             ]
@@ -313,7 +307,7 @@ f"🔥 LOSS {ls} — PAIN IS TEMPORARY!\n\n💎 {w1} 💎 {w2} 💎 {w3} 💎\n\
     elif data=="admin_ban": bot.send_message(chat_id, "Use: /ban 123456")
     elif data=="admin_unban": bot.send_message(chat_id, "Use: /unban 123456")
     elif data=="howitworks":
-        msg=bot.send_message(chat_id, "📜 How it Works:\n1️⃣ Register\n2️⃣ 5/day FREE\n3️⃣ Deposit upgrade\n4️⃣ Status Daily\n5️⃣ GWR Lifetime", reply_markup=main_menu())
+        msg=bot.send_message(chat_id, "📜 How it Works:\n1️⃣ Register\n2️⃣ 5/day FREE\n3️⃣ Deposit upgrade\n4️⃣ Status Daily + Limit Daily reset 00:00", reply_markup=main_menu())
         track_msg(chat_id, msg)
     elif data=="admin_broadcast":
         if uid!=OWNER_ID: return
@@ -404,7 +398,33 @@ def send_signal_result(chat_id, uid, pair, exp, typ):
     limit=get_limit(get_level(uid))
     used=users[uid].get("used",0)
     if used>=limit and uid!=OWNER_ID:
-        msg=bot.send_message(chat_id, f"⛔ Limit {used}/{limit} reached!", reply_markup=main_menu())
+        link = f"{AFFILIATE_LINK}?subid={uid}" if "?" not in AFFILIATE_LINK else f"{AFFILIATE_LINK}&subid={uid}"
+        level=get_level(uid)
+        if level=="NONE":
+            mot_limit=(
+f"⛔⛔ DAILY LIMIT REACHED! {used}/{limit} ⛔⛔\n\n"
+f"😤 You used all 5 FREE signals today! Market is still giving WINNERS but you are BLOCKED!\n\n"
+f"🚀 WHY STAY LIMITED?\n"
+f"🟢 STARTER $20 → 20/day (4X more)\n"
+f"🔵 PRO $50 → 100/day (20X more) MOST POPULAR!\n"
+f"💎 VIP $100 → UNLIMITED 87% WR — NEVER see limit again!\n\n"
+f"👑 Don't wait till tomorrow! Upgrade NOW and keep winning TODAY!\n\n"
+f"🔗 Upgrade: {link}"
+            )
+        else:
+            mot_limit=(
+f"🔥 LIMIT HIT! {used}/{limit} — YOU ARE ON FIRE! 🔥\n\n"
+f"💪 {level} level — You traded hard today! But market has MORE profit waiting!\n\n"
+f"⚠️ {used} signals done — Imagine if you had UNLIMITED? You would have made 3X more!\n\n"
+f"💎 VIP $100 = UNLIMITED signals, 80-87% WR, NO LIMITS EVER!\n"
+f"🔵 PRO $50 = 100/day — 5X your current limit!\n\n"
+f"🚀 Top traders NEVER stop at limit — they UPGRADE and DOMINATE!\n"
+f"👑 Level up NOW: {link}"
+            )
+        markup=types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("💎 Upgrade to VIP UNLIMITED", url=link))
+        markup.add(types.InlineKeyboardButton("🔵 Upgrade to PRO 100/day", url=link))
+        msg=bot.send_message(chat_id, mot_limit, reply_markup=markup)
         track_msg(chat_id, msg)
         return
     users[uid]["used"]=used+1
@@ -417,7 +437,7 @@ def send_signal_result(chat_id, uid, pair, exp, typ):
     markup.add(types.InlineKeyboardButton("✅ WIN", callback_data="win"), types.InlineKeyboardButton("❌ LOSS", callback_data="loss"))
     markup.add(types.InlineKeyboardButton("🔥 Next Signal", callback_data="next_signal"))
     clean_and_track(chat_id, uid)
-    msg=bot.send_message(chat_id, f"🔥 {level} {wr} {'💹' if typ=='real' else '🔶'}\n📊 {pair}\n📈 {action}\n⏰ Exp {exp}\n📉 RSI {rsi} {trend}\n📊 {users[uid]['used']}/{limit if limit<999999 else '∞'}", reply_markup=markup)
+    msg=bot.send_message(chat_id, f"🔥 {level} {wr} {'💹' if typ=='real' else '🔶'}\n📊 {pair}\n📈 {action}\n⏰ Exp {exp}\n📉 RSI {rsi} {trend}\n📊 {users[uid]['used']}/{limit if limit<999999 else '∞'} Today", reply_markup=markup)
     track_msg(chat_id, msg)
 
 def admin_cmd(m, is_callback=False, is_stats=False):
@@ -519,7 +539,7 @@ def admin_cmd(m, is_callback=False, is_stats=False):
 def admin_commands(m): admin_cmd(m)
 
 bot.remove_webhook()
-print("V13.2.4 FINAL - 3 PARTS DEPLOYED")
+print("V13.2.6 FINAL - MOTIV LIMIT DEPLOYED")
 
 def run_flask():
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8080)))
