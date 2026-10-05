@@ -1,5 +1,2 @@
-Flask
 pyTelegramBotAPI
-requests
-pandas
-numpy
+Flask
