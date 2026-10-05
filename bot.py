@@ -181,8 +181,7 @@ def clearme(m):
     if uid in add_pending: del add_pending[uid]
     mm=bot.send_message(chat_id,"✅ Cleared! /start")
     store_and_cleanup(chat_id, mm.message_id)
-    threading.Thread(target=cleanup_old_messages, args=(chat_id, mm.message_id), daemon=True).start()
-    @bot.message_handler(content_types=['text','photo','video','document','animation'], func=lambda m: str(m.from_user.id)==OWNER and (str(m.from_user.id) in broadcast_data or str(m.from_user.id) in add_pending) and not (m.text and m.text.startswith("/")))
+    threading.Thread(target=cleanup_old_messages, args=(chat_id, mm.message_id), daemon=True).start()@bot.message_handler(content_types=['text','photo','video','document','animation'], func=lambda m: str(m.from_user.id)==OWNER and (str(m.from_user.id) in broadcast_data or str(m.from_user.id) in add_pending) and not (m.text and m.text.startswith("/")))
 def owner_pending_handler(m):
     tid=str(m.from_user.id); chat_id=m.chat.id
     if tid in add_pending:
@@ -266,8 +265,7 @@ def signal_keyboard():
     k=types.InlineKeyboardMarkup(row_width=2)
     k.add(types.InlineKeyboardButton("✅ WIN",callback_data="res_win"),types.InlineKeyboardButton("❌ LOSS",callback_data="res_loss"))
     k.add(types.InlineKeyboardButton("🔥 Next Signal",callback_data="sel_market"))
-    return k
-    @bot.callback_query_handler(func=lambda c: True)
+    return k@bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     try:
         tid=str(c.from_user.id);d=c.data;chat_id=c.message.chat.id;lvl=get_lvl(tid)
