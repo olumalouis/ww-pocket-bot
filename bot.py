@@ -258,7 +258,8 @@ def text_handler(m):
         k2.add(types.InlineKeyboardButton("📢 Broadcast",callback_data="ad_broad"),types.InlineKeyboardButton("🚫 Ban",callback_data="ad_ban"))
         k2.add(types.InlineKeyboardButton("💰 Deposits",callback_data="ad_deps"),types.InlineKeyboardButton("🔄 Reset",callback_data="ad_reset"))
         k2.add(types.InlineKeyboardButton("🔒 Sec Log",callback_data="ad_sec"),types.InlineKeyboardButton("🏆 WR",callback_data="ad_wr"))
-        mm=bot.send_message(chat_id,f"👑 ADMIN V12.6.2.1 Owner {OWNER}\n👥 Users {len(load_db())}",reply_markup=k2); store_and_cleanup(chat_id,mm.message_id); return@bot.callback_query_handler(func=lambda c: True)
+        mm=bot.send_message(chat_id,f"👑 ADMIN V12.6.2.1 Owner {OWNER}\n👥 Users {len(load_db())}",reply_markup=k2); store_and_cleanup(chat_id,mm.message_id); return
+        @bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     try:
         bot.answer_callback_query(c.id)
