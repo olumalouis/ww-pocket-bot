@@ -170,6 +170,7 @@ def handle_bcast(m):
                 except:
                     pass
         threading.Thread(target=auto_del, daemon=True).start()
+        
         def get_signal_with_indicators():
     rsi=round(random.uniform(18,82),1)
     price=round(random.uniform(1.0500,1.3500),4)
