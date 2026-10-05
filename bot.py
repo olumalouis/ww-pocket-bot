@@ -118,41 +118,82 @@ def start(m):
         limit=get_limit(level)
         limit_txt = "∞" if limit>=999999 else str(limit)
         msg=bot.send_message(m.chat.id, f"👋 Welcome {m.from_user.first_name}!\n👑 {level}\n📊 {used}/{limit_txt} Used Today", reply_markup=main_menu())
-        track_msg(m.chat.id, msg)@bot.message_handler(func=lambda m: True, content_types=['text'])
-def text_buttons(m):
-    if users.get(m.from_user.id,{}).get("bcast_wait"): return
-    txt=(m.text or "").upper()
+        track_msg(m.chat.id, msg)@bot.message_handler(content_types=['text','photo','video','document','audio','voice','sticker','animation','video_note','location','contact','poll','venue','dice','game'], func=lambda m: users.get(m.from_user.id,{}).get("bcast_wait") is not None and m.from_user.id==OWNER_ID)
+def handle_bcast(m):
     uid=m.from_user.id
+    wait=users[uid].get("bcast_wait")
+    if not wait: return
+    hours=wait["hours"]
+    target=wait["target"]
+    sent=[]
+    count=0
+    failed=0
+    for u_id in list(users.keys()):
+        if u_id==OWNER_ID: continue
+        lvl=get_level(u_id)
+        if target!="ALL" and lvl!=target: continue
+        if users[u_id].get("banned"): continue
+        try:
+            if m.content_type=='text':
+                msg=bot.send_message(u_id, f"📢 ADMIN MESSAGE:\n\n{m.text}")
+            else:
+                msg=bot.copy_message(u_id, m.chat.id, m.message_id)
+            if hours>0: sent.append((u_id, msg.message_id))
+            count+=1
+        except:
+            failed+=1
+            pass
+    users[uid]["bcast_wait"]=None
+    msg_confirm=bot.send_message(uid, f"✅ BROADCAST DONE - ALL FILE SUPPORTED\n\n📁 File Type: {m.content_type}\n👥 Target: {target}\n✅ Sent: {count}\n❌ Failed: {failed}\n⏰ Auto-Delete: {hours}h", reply_markup=main_menu())
+    track_msg(uid, msg_confirm)
+    if hours>0 and sent:
+        def auto_del():
+            import time
+            time.sleep(hours*3600)
+            for cid,mid in sent:
+                try: bot.delete_message(cid,mid)
+                except: pass
+        threading.Thread(target=auto_del, daemon=True).start()
+
+@bot.message_handler(func=lambda m: True, content_types=['text'])
+def text_buttons(m):
+    uid=m.from_user.id
+    txt=(m.text or "")
+    txt_up=txt.upper()
+    if users.get(uid,{}).get("bcast_wait"):
+        if any(k in txt_up for k in ["GET SIGNAL","REAL 15","OTC 30","UPGRADE","DEPOSIT","MY STATUS","HOW IT WORKS","ADMIN PANEL","/START","/ADDUSER","/BAN","/USERS","/STATS","CANCEL"]):
+            users[uid]["bcast_wait"]=None
+        else:
+            return
     if uid not in users: ensure_user(uid, m.from_user.username or m.from_user.first_name)
     if users[uid].get("banned"):
         bot.send_message(m.chat.id, "⛔ You are banned")
         return
     check_daily(uid)
-
-    if "GET SIGNAL" in txt:
+    if "GET SIGNAL" in txt_up:
         clean_and_track(m.chat.id, uid)
         markup=types.InlineKeyboardMarkup(row_width=2)
         markup.add(types.InlineKeyboardButton("✅ REAL 15", callback_data="real_15"), types.InlineKeyboardButton("🔶 OTC 30", callback_data="otc_30"))
         msg=bot.send_message(m.chat.id, "🔥 Select Market:", reply_markup=markup)
         track_msg(m.chat.id, msg)
-    elif "REAL 15" in txt:
+    elif "REAL 15" in txt_up:
         clean_and_track(m.chat.id, uid)
         markup=types.InlineKeyboardMarkup(row_width=2)
         markup.add(types.InlineKeyboardButton("✋ Manual 15", callback_data="manual_real"), types.InlineKeyboardButton("🤖 Auto", callback_data="auto_real"))
         msg=bot.send_message(m.chat.id, "💹 REAL 15 Market:", reply_markup=markup)
         track_msg(m.chat.id, msg)
-    elif "OTC 30" in txt:
+    elif "OTC 30" in txt_up:
         clean_and_track(m.chat.id, uid)
         markup=types.InlineKeyboardMarkup(row_width=2)
         markup.add(types.InlineKeyboardButton("✋ Manual 30", callback_data="manual_otc"), types.InlineKeyboardButton("🤖 Auto 30", callback_data="auto_otc"))
         msg=bot.send_message(m.chat.id, "🔶 OTC 30 Market:", reply_markup=markup)
         track_msg(m.chat.id, msg)
-    elif "MY STATUS" in txt or "MYSTATUS" in txt:
+    elif "MY STATUS" in txt_up or "MYSTATUS" in txt_up:
         wins=users[uid].get('wins',0)
         losses=users[uid].get('losses',0)
         msg=bot.send_message(m.chat.id, f"📈 MY STATUS - DAILY RESET 00:00 UTC\n\n🏆 DAILY W/L:\n✅ Wins Today: {wins}\n❌ Losses Today: {losses}\n\n⏰ Resets daily at 00:00 UTC", reply_markup=main_menu())
         track_msg(m.chat.id, msg)
-    elif "UPGRADE" in txt:
+    elif "UPGRADE" in txt_up:
         link = f"{AFFILIATE_LINK}?subid={uid}" if "?" not in AFFILIATE_LINK else f"{AFFILIATE_LINK}&subid={uid}"
         level=get_level(uid)
         markup=types.InlineKeyboardMarkup()
@@ -177,16 +218,16 @@ f"⏰ Don't watch others win — UPGRADE TODAY!"
         )
         msg=bot.send_message(m.chat.id, upgrade_text, reply_markup=markup)
         track_msg(m.chat.id, msg)
-    elif "DEPOSIT" in txt:
+    elif "DEPOSIT" in txt_up:
         link = f"{AFFILIATE_LINK}?subid={uid}" if "?" not in AFFILIATE_LINK else f"{AFFILIATE_LINK}&subid={uid}"
         markup=types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("💰 Deposit Now", url=link))
         msg=bot.send_message(m.chat.id, f"💰 Deposit now to upgrade!\n🔗 {link}", reply_markup=markup)
         track_msg(m.chat.id, msg)
-    elif "HOW IT WORKS" in txt or txt.startswith("HOW"):
+    elif "HOW IT WORKS" in txt_up or txt_up.startswith("HOW"):
         msg=bot.send_message(m.chat.id, "📜 How it Works:\n1️⃣ Register\n2️⃣ 5/day FREE\n3️⃣ Deposit upgrade\n4️⃣ My Status shows Daily W/L only\n5️⃣ Limit & W/L reset 00:00 UTC", reply_markup=main_menu())
         track_msg(m.chat.id, msg)
-    elif "ADMIN PANEL" in txt or txt.startswith('/ADMIN'):
+    elif "ADMIN PANEL" in txt_up or txt_up.startswith('/ADMIN'):
         if uid!=OWNER_ID:
             msg=bot.send_message(m.chat.id, "⛔ Admin only")
             track_msg(m.chat.id, msg)
@@ -197,9 +238,9 @@ f"⏰ Don't watch others win — UPGRADE TODAY!"
         markup.add(types.InlineKeyboardButton("👥 Users", callback_data="admin_users"), types.InlineKeyboardButton("📊 Stats", callback_data="admin_stats"))
         markup.add(types.InlineKeyboardButton("➕ Add User", callback_data="admin_adduser"), types.InlineKeyboardButton("🔍 Search User", callback_data="admin_search"))
         markup.add(types.InlineKeyboardButton("⛔ Ban User", callback_data="admin_ban"), types.InlineKeyboardButton("✅ Unban User", callback_data="admin_unban"))
-        msg=bot.send_message(m.chat.id, f"👑 ADMIN PANEL\nTotal: {len(users)}\n✅ V13.3.0 DEPLOY FINAL", reply_markup=markup)
+        msg=bot.send_message(m.chat.id, f"👑 ADMIN PANEL\nTotal: {len(users)}\n✅ V13.3.1 FIXED - BUTTONS + ALL FILES", reply_markup=markup)
         track_msg(m.chat.id, msg)
-    elif txt.startswith('/USERS') or txt.startswith('/STATS') or txt.startswith('/BROADCAST') or txt.startswith('/ADDUSER') or txt.startswith('/SUCH') or txt.startswith('/SEARCH') or txt.startswith('/FIND') or txt.startswith('/BAN') or txt.startswith('/UNBAN'):
+    elif txt_up.startswith('/USERS') or txt_up.startswith('/STATS') or txt_up.startswith('/BROADCAST') or txt_up.startswith('/ADDUSER') or txt_up.startswith('/SUCH') or txt_up.startswith('/SEARCH') or txt_up.startswith('/FIND') or txt_up.startswith('/BAN') or txt_up.startswith('/UNBAN'):
         admin_cmd(m)
 
 @bot.callback_query_handler(func=lambda c: True)
@@ -307,7 +348,7 @@ f"☕ TAKE BREAK 30-60 min! Don't revenge trade!\n📊 Daily W:{users[uid]['wins
         if uid!=OWNER_ID: return
         _, hours, target = data.split("_")
         users[uid]["bcast_wait"]={"hours":int(hours),"target":target}
-        msg=bot.send_message(chat_id, f"✍️ DONE: Delete {hours}h | Target {target}\nNow send file")
+        msg=bot.send_message(chat_id, f"✍️ DONE: Delete {hours}h | Target {target}\nNow send ANY file - ALL SUPPORTED!", reply_markup=main_menu())
         track_msg(chat_id, msg)@bot.message_handler(content_types=['text','photo','video','document','audio','voice','sticker','animation','video_note'], func=lambda m: users.get(m.from_user.id,{}).get("bcast_wait") is not None and m.from_user.id==OWNER_ID)
 def handle_bcast(m):
     uid=m.from_user.id
