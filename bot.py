@@ -1,10 +1,9 @@
 import os, json, random, time, threading
-from datetime import datetime, date, timedelta
+from datetime import date
 from flask import Flask, request
 import telebot
 from telebot import types
 TOKEN=os.getenv("TOKEN") or os.getenv("BOT_TOKEN") or ""
-if ":" not in TOKEN: print("❌ BAD TOKEN - Add TOKEN var in Railway")
 OWNER="8188622130"
 LINK=os.getenv("LINK","https://pocket-broker.com")
 bot=telebot.TeleBot(TOKEN,threaded=False)
@@ -91,7 +90,7 @@ def is_owner_pending(m):
         return True
     return False
 @app.route('/')
-def home(): return "V12.6.2.4 FIXED - No Lock After Warning"
+def home(): return "V12.6.5 NEW MOTIVATIONAL WARNINGS"
 @app.route('/postback')
 def pocket_postback():
     try:
@@ -108,9 +107,9 @@ def pocket_postback():
         elif total>=20: u["level"]="starter"; u["verified"]=True; new_lvl="STARTER"
         else: new_lvl="FREE"
         d[str(uid)]=u; save(d)
-        try: bot.send_message(int(uid),f"💰 Deposit ${amt} received!\nOld ${old} → Total ${total} (SUM)\nLevel: {new_lvl}")
+        try: bot.send_message(int(uid),f"💰 Deposit ${amt} Total ${total} Level {new_lvl} SUM!")
         except: pass
-        try: bot.send_message(int(OWNER),f"💵 DEPOSIT {uid} +${amt} = Total ${total} Level {new_lvl}")
+        try: bot.send_message(int(OWNER),f"💵 {uid} +${amt} Total ${total} {new_lvl}")
         except: pass
         return f"OK {uid} {old}->{total}",200
     except Exception as e: return f"Error {e}",500
@@ -118,40 +117,29 @@ def pocket_postback():
 def start_cmd(m):
     chat_id=m.chat.id; uid=str(m.from_user.id)
     if m.text.startswith("/cancel"): broadcast_data.clear(); add_pending.clear(); bot.send_message(chat_id,"✅ Cancelled"); return
-    u=ensure(uid); lvl=get_lvl(uid)
-    lim_show="♾️ Unlimited 87% WR" if lvl=="vip" else "5/day"
-    txt=f"👋 Welcome {m.from_user.first_name}!\n👑 {lvl.upper()} 📊 Today {u.get('today',0)}/{lim_show}\n🔥 15R+30OTC Ready? No lock after 6L warning!"
+    u=ensure(uid); lvl=get_lvl(uid); lim_show="♾️ Unlimited" if lvl=="vip" else "5/day"
+    txt=f"👋 Welcome {m.from_user.first_name}!\n👑 {lvl.upper()} 📊 {u.get('today',0)}/{lim_show}\n🔥 NEW PRO WARNINGS ACTIVE!"
     mm=bot.send_message(chat_id,txt,reply_markup=get_main_kb(uid))
     store_and_cleanup(chat_id,mm.message_id)
 @bot.message_handler(content_types=["text","photo","video","document","animation"],func=is_owner_pending)
 def owner_pending_handler(m):
     tid=str(m.from_user.id); chat_id=m.chat.id
     if tid in add_pending:
-        uid_input=(m.text or "").strip().replace("@","").split()[0]
+        uid_input=(m.text or "").strip().split()[0]
         if not uid_input.isdigit(): bot.send_message(chat_id,"❌ Numeric ID"); return
         d=load_db(); level=add_pending.get(tid); lvl_clean=level.lower().split("_")[0]
         mp={"free":0,"starter":20,"pro":50,"vip":100,"lifetime":1000}
         d[uid_input]={"total":mp.get(lvl_clean,0),"level":"vip" if lvl_clean in ["vip","lifetime"] else lvl_clean if lvl_clean!="free" else "none","verified":lvl_clean!="free","today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0}
-        if lvl_clean=="lifetime": d[uid_input]["expires_at"]="lifetime"
         save(d); add_pending.pop(tid,None); bot.send_message(chat_id,f"✅ ADD {uid_input} as {lvl_clean}"); return
     if tid in broadcast_data:
         target=broadcast_data.get(tid); tval=target["target"] if isinstance(target,dict) else target
-        data={"target":tval} if not isinstance(target,dict) or target.get("type")=="pending" else target
+        data={"target":tval}
         if m.content_type=="photo": data["type"]="photo"; data["file_id"]=m.photo[-1].file_id; data["caption"]=m.caption or ""
         elif m.content_type=="video": data["type"]="video"; data["file_id"]=m.video.file_id; data["caption"]=m.caption or ""
         else: data["type"]="text"; data["text"]=m.text or ""
         data["target"]=tval; broadcast_data[tid]=data
         k=types.InlineKeyboardMarkup(); k.add(types.InlineKeyboardButton("No Delete",callback_data="del_none")); k.add(types.InlineKeyboardButton("1 Week",callback_data="del_7"))
-        bot.send_message(chat_id,f"✅ Saved Target:{tval} When delete?",reply_markup=k); return
-@bot.message_handler(commands=["adduser"])
-def admin_cmds(m):
-    if str(m.from_user.id)!=OWNER: return
-    a=m.text.split(); d=load_db(); mp={"free":0,"starter":20,"pro":50,"vip":100,"lifetime":1000}
-    if len(a)<3: bot.send_message(m.chat.id,"/adduser ID LEVEL"); return
-    uids=[u.strip() for u in a[1].replace(","," ").split() if u.strip().isdigit()]
-    lvl=a[2].lower().strip()
-    for uid in uids: d[uid]={"total":mp[lvl],"level":"vip" if lvl in ["vip","lifetime"] else lvl if lvl!="free" else "none","verified":lvl!="free","today":0,"date":str(date.today()),"banned":False,"wins":0,"losses":0,"win_streak":0,"loss_streak":0,"today_wins":0,"today_losses":0}
-    save(d); bot.send_message(m.chat.id,f"✅ Added {uids} as {lvl}")
+        bot.send_message(chat_id,f"Saved {tval}",reply_markup=k); return
 @bot.message_handler(func=lambda m: True)
 def text_handler(m):
     chat_id=m.chat.id; uid=str(m.from_user.id); txt=(m.text or "").strip()
@@ -162,18 +150,17 @@ def text_handler(m):
         mm=bot.send_message(chat_id,"🔥 Select Market:",reply_markup=k); store_and_cleanup(chat_id,mm.message_id); return
     if "Deposit" in txt and "Upgrade" not in txt:
         k=types.InlineKeyboardMarkup(); k.add(types.InlineKeyboardButton("💰 Deposit",url=LINK+"?click_id="+uid))
-        mm=bot.send_message(chat_id,f"💰 DEPOSIT {LINK}?click_id={uid}\n💵 Sums all deposits!",reply_markup=k); store_and_cleanup(chat_id,mm.message_id); return
+        mm=bot.send_message(chat_id,f"💰 {LINK}?click_id={uid}",reply_markup=k); store_and_cleanup(chat_id,mm.message_id); return
     if "Status" in txt:
-        u=ensure(uid); mm=bot.send_message(chat_id,f"ID:{uid}\nLevel:{lvl}\nTotal:${u.get('total',0)}\nW/L:{u.get('today_wins',0)}W-{u.get('today_losses',0)}L Today | {u.get('wins',0)}W-{u.get('losses',0)}L Total"); store_and_cleanup(chat_id,mm.message_id); return
+        u=ensure(uid); mm=bot.send_message(chat_id,f"ID:{uid} Level:{lvl} Total:${u.get('total',0)} W/L:{u.get('today_wins',0)}W-{u.get('today_losses',0)}L"); store_and_cleanup(chat_id,mm.message_id); return
     if "Upgrade" in txt:
-        u=ensure(uid); dep=u.get('total',0); need20=max(0,20-dep); need50=max(0,50-dep); need100=max(0,100-dep)
-        if lvl=="vip": txt_up=f"👑 VIP ALREADY! Total ${dep} ♾️ 87% WR No lock!"
-        else: txt_up=f"🚀 UPGRADE {lvl.upper()} 👑\nTotal:${dep} SUMS ALL!\n\nSTARTER $20 Need ${need20}\nPRO $50 Need ${need50}\nVIP $100 Need ${need100} BEST!\n\nExample $10+$15+$30=$55=PRO!"
-        k=types.InlineKeyboardMarkup(); k.add(types.InlineKeyboardButton(f"STARTER Need ${need20}",url=LINK+"?click_id="+uid)); k.add(types.InlineKeyboardButton(f"PRO Need ${need50}",url=LINK+"?click_id="+uid)); k.add(types.InlineKeyboardButton(f"VIP Need ${need100}",url=LINK+"?click_id="+uid))
+        u=ensure(uid); dep=u.get('total',0); need100=max(0,100-dep)
+        txt_up=f"🚀 UPGRADE {lvl.upper()} Total ${dep} Need ${need100} for VIP"
+        k=types.InlineKeyboardMarkup(); k.add(types.InlineKeyboardButton(f"VIP Need ${need100}",url=LINK+"?click_id="+uid))
         mm=bot.send_message(chat_id,txt_up,reply_markup=k); store_and_cleanup(chat_id,mm.message_id); return
     if "Admin" in txt and uid==OWNER:
-        k2=types.InlineKeyboardMarkup(row_width=2); k2.add(types.InlineKeyboardButton("➕ Add User",callback_data="ad_adduser")); k2.add(types.InlineKeyboardButton("Users",callback_data="ad_users")); k2.add(types.InlineKeyboardButton("Broadcast",callback_data="ad_broad"))
-        mm=bot.send_message(chat_id,f"ADMIN Users {len(load_db())} - No lock after warning",reply_markup=k2); store_and_cleanup(chat_id,mm.message_id); return
+        k2=types.InlineKeyboardMarkup(row_width=2); k2.add(types.InlineKeyboardButton("Add User",callback_data="ad_adduser")); k2.add(types.InlineKeyboardButton("Broadcast",callback_data="ad_broad"))
+        mm=bot.send_message(chat_id,f"ADMIN {len(load_db())}",reply_markup=k2); store_and_cleanup(chat_id,mm.message_id); return
 
 @bot.callback_query_handler(func=lambda c: True)
 def cb(c):
@@ -186,25 +173,35 @@ def cb(c):
             if not ud: ud=ensure(tid)
             if data=="res_win":
                 ud["wins"]=ud.get("wins",0)+1; ud["today_wins"]=ud.get("today_wins",0)+1; ud["win_streak"]=ud.get("win_streak",0)+1; ud["loss_streak"]=0; dbb[tid]=ud; save(dbb)
-                mm=bot.send_message(chat_id,f"✅ BOOM WIN! 🔥 Streak {ud['win_streak']}W",reply_markup=signal_keyboard()); store_and_cleanup(chat_id,mm.message_id); return
+                ws=ud.get("win_streak",0)
+                win_msgs=[
+                    f"✅ BOOM! WIN! 🔥💰\n🏆 Streak: {ws} Wins!\n🚀 Keep pushing VIP!",
+                    f"✅ PERFECT WIN! 💎🔥\n📈 {ws} in a row! You're on fire!",
+                    f"✅ KAZI WIN! 👑💸\n🔥 Win streak {ws} - Machine!",
+                    f"✅ BANG! WIN CONFIRMED! 🚀\n💰 {ws} Wins straight! Keep going!"
+                ]
+                msg=random.choice(win_msgs)
+                mm=bot.send_message(chat_id,msg,reply_markup=signal_keyboard()); store_and_cleanup(chat_id,mm.message_id); return
             else:
                 ud["losses"]=ud.get("losses",0)+1; ud["today_losses"]=ud.get("today_losses",0)+1; ud["loss_streak"]=ud.get("loss_streak",0)+1; ud["win_streak"]=0; dbb[tid]=ud; save(dbb)
                 ls=ud.get("loss_streak",0)
-                if ls>=6: msg=f"⚠️ WARNING! 6 LOSS STREAK 🚫\n🧠 Boss STOP trading now! 📉 Market bad, take break! ☕️ Rest 1 hour!\n🔄 Come back fresh = WIN again!\n\n👉 You CAN still get signal (no lock) but better rest!"
-                elif ls>=5: msg=f"❌ LOSS {ls} - Almost STOP! Slow down!"
-                else: msg=f"❌ Loss {ls} - Don't revenge!"
+                if ls<=2:
+                    loss12=[
+                        f"❌ Loss, but we learn! 📚\n💪 Loss streak {ls} - Next is WIN for sure!",
+                        f"❌ Not today, but we fight! ⚔️\n🔥 {ls} loss - Market trick, we adapt!",
+                        f"❌ Small loss! 💸\n🚀 Top traders lose too, WIN coming!"
+                    ]
+                    msg=random.choice(loss12)
+                elif ls==3:
+                    msg=f"❌ 3 Losses in row 😤\n🧠 Don't revenge trade! Take small break\n💪 Next is WIN, trust KAZI!"
+                elif ls==4:
+                    msg=f"❌ 4 Losses 💔\n⚠️ Slow down boss! Reduce lot size\n🔥 We recover together!"
+                elif ls==5:
+                    msg=f"❌ 5 Losses in row! 🚨\n🛑 Almost at limit! 1 more = STOP\n🧘 Breathe, next will recover!"
+                else:
+                    msg=f"⚠️ WARNING! 6 LOSS STREAK 🚫\n\n🧠 Boss, STOP trading now!\n📉 Market is bad today, take a break!\n☕️ Rest 1 hour, clear mind!\n🔄 Come back fresh = WIN again!\n\n💡 Pro traders know when to STOP!\n🛑 Paused for your safety!"
                 mm=bot.send_message(chat_id,msg,reply_markup=signal_keyboard()); store_and_cleanup(chat_id,mm.message_id); return
-        if tid==OWNER and data=="ad_users":
-            txt="Users:\n"
-            for uid,u in list(load_db().items())[:20]: txt+=f"{uid} {u.get('level')} ${u.get('total')}\n"
-            bot.send_message(chat_id,txt); return
-        if tid==OWNER and data=="ad_adduser":
-            kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("FREE",callback_data="addlvl_free")); kb.add(types.InlineKeyboardButton("STARTER",callback_data="addlvl_starter")); kb.add(types.InlineKeyboardButton("VIP",callback_data="addlvl_vip"))
-            bot.send_message(chat_id,"Select level",reply_markup=kb); return
         if tid==OWNER and data.startswith("addlvl_"): level=data.replace("addlvl_",""); add_pending[tid]=level; bot.send_message(chat_id,f"Level {level} Send ID"); return
-        if tid==OWNER and data=="ad_broad":
-            kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("ALL",callback_data="broad_ALL")); kb.add(types.InlineKeyboardButton("VIP",callback_data="broad_VIP"))
-            bot.send_message(chat_id,"Target?",reply_markup=kb); return
         if tid==OWNER and data.startswith("broad_"): target=data.replace("broad_",""); broadcast_data[tid]={"target":target,"type":"pending"}; bot.send_message(chat_id,f"Target {target} Send msg"); return
         if tid==OWNER and data.startswith("del_"):
             content=broadcast_data.get(tid)
@@ -217,6 +214,12 @@ def cb(c):
                     cnt+=1; time.sleep(0.05)
                 except: pass
             bot.send_message(chat_id,f"Sent {cnt}"); broadcast_data.pop(tid,None); return
+        if tid==OWNER and data=="ad_adduser":
+            kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("FREE",callback_data="addlvl_free")); kb.add(types.InlineKeyboardButton("STARTER",callback_data="addlvl_starter")); kb.add(types.InlineKeyboardButton("PRO",callback_data="addlvl_pro")); kb.add(types.InlineKeyboardButton("VIP",callback_data="addlvl_vip"))
+            bot.send_message(chat_id,"Select level",reply_markup=kb); return
+        if tid==OWNER and data=="ad_broad":
+            kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("ALL",callback_data="broad_ALL")); kb.add(types.InlineKeyboardButton("VIP",callback_data="broad_VIP"))
+            bot.send_message(chat_id,"Target?",reply_markup=kb); return
         if data=="sel_market":
             k=types.InlineKeyboardMarkup(row_width=2); k.add(types.InlineKeyboardButton("💹 REAL 15",callback_data="m_real"),types.InlineKeyboardButton("📊 OTC 30",callback_data="m_otc"))
             mm=bot.send_message(chat_id,"Select Market",reply_markup=k); store_and_cleanup(chat_id,mm.message_id); return
@@ -250,13 +253,13 @@ def cb(c):
             is_over,cur,lim=check_limit(tid,lvl)
             if is_over: bot.send_message(chat_id,f"Limit {cur}/{lim}"); return
             pairs=OTC if data.startswith("otc_") else REAL; pair=random.choice(pairs); exp=random.choice(EXP); sig,rsi,trend,conf=get_sig(pair,exp,lvl); inc(tid)
-            mm=bot.send_message(chat_id,f"🔥 {lvl.upper()} {conf}% WR 💹 {pair} 📈 {sig} Exp {exp} RSI {rsi:.1f} {trend} {cur+1}/{lim}",reply_markup=signal_keyboard()); store_and_cleanup(chat_id,mm.message_id); return
+            mm=bot.send_message(chat_id,f"🔥 {lvl.upper()} {conf}% {pair} {sig} {exp} {cur+1}/{lim}",reply_markup=signal_keyboard()); store_and_cleanup(chat_id,mm.message_id); return
         if data.startswith("sig_"):
             tmp=data[4:]; idx=tmp.rfind("_M"); pair=tmp[:idx]; exp=tmp[idx+1:]
             is_over,cur,lim=check_limit(tid,lvl)
             if is_over: bot.send_message(chat_id,f"Limit {cur}/{lim}"); return
             sig,rsi,trend,conf=get_sig(pair,exp,lvl); inc(tid)
-            mm=bot.send_message(chat_id,f"🔥 {lvl.upper()} {conf}% WR 💹 {pair} 📈 {sig} Exp {exp} RSI {rsi:.1f} {trend} {cur+1}/{lim}",reply_markup=signal_keyboard()); store_and_cleanup(chat_id,mm.message_id); return
+            mm=bot.send_message(chat_id,f"🔥 {lvl.upper()} {conf}% {pair} {sig} {exp} {cur+1}/{lim}",reply_markup=signal_keyboard()); store_and_cleanup(chat_id,mm.message_id); return
     except Exception as e: print(f"CB ERR {e}")
 
 def run_bot():
@@ -265,10 +268,10 @@ def run_bot():
             try: bot.remove_webhook()
             except: pass
             time.sleep(1)
-            print("Starting polling... TOKEN exists",":" in TOKEN)
+            print("Starting polling V12.6.5 NEW WARNINGS")
             bot.infinity_polling(skip_pending=True,timeout=20)
         except Exception as e:
-            print(f"Polling crash {e}"); time.sleep(5)
+            print(f"Crash {e}"); time.sleep(5)
 
 if __name__=="__main__":
     threading.Thread(target=run_bot,daemon=True).start()
