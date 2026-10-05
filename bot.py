@@ -169,7 +169,8 @@ def handle_bcast(m):
                     bot.delete_message(cid,mid)
                 except:
                     pass
-        threading.Thread(target=auto_del, daemon=True).start()def get_signal_with_indicators():
+        threading.Thread(target=auto_del, daemon=True).start()
+        def get_signal_with_indicators():
     rsi=round(random.uniform(18,82),1)
     price=round(random.uniform(1.0500,1.3500),4)
     ema200=round(price + random.uniform(-0.0150,0.0150),4)
