@@ -7,7 +7,7 @@ from telebot import types
 app = Flask(__name__)
 @app.route('/')
 def home():
-    return 'WW Pocket Signals V14 LIVE'
+    return 'WW Pocket Signals V14.1 FIXED'
 
 TOKEN = os.getenv("BOT_TOKEN","").strip()
 AFF_BASE = os.getenv("AFF_LINK","https://u3.shortink.io/smart/jnLBWcb8IEyL7T").strip()
@@ -21,7 +21,7 @@ try:
     with open(DB_FILE) as f:
         DB=json.load(f)
 except:
-    DB={"users":{},"banned":[],"stats":{"gwr_w":0,"gwr_l":0},"_bcast_tmp":{},"_bcast_wait":{}}
+    DB={"users":{},"banned":[],"stats":{"gwr_w":0,"gwr_l":0},"_bcast_tmp":{},"_bcast_wait":{},"_admin_wait":{}}
 
 def save():
     try:
@@ -127,8 +127,9 @@ def pairs_kb(market, page=0, expiry="M1"):
     end=start+per
     kb=types.InlineKeyboardMarkup(row_width=2)
     for p in pairs[start:end]:
-        kb.add(types.InlineKeyboardButton(p, callback_data="pick_"+market+"_"+p+"_"+expiry+"_"+str(page)))
-    kb.add(types.InlineKeyboardButton("⏰ M1", callback_data="expiry_"+market+"_"+str(page)+"_M1"),types.InlineKeyboardButton("⏰ M2", callback_data="expiry_"+market+"_"+str(page)+"_M2"),types.InlineKeyboardButton("⏰ M3", callback_data="expiry_"+market+"_"+str(page)+"_M3"),types.InlineKeyboardButton("⏰ M5", callback_data="expiry_"+market+"_"+str(page)+"_M5"))
+        kb.add(types.InlineKeyboardButton(p+" ["+expiry+"]", callback_data="pick_"+market+"_"+p+"_"+expiry+"_"+str(page)))
+    kb.row(types.InlineKeyboardButton("⏰ M1"+(" ✅" if expiry=="M1" else ""), callback_data="expiry_"+market+"_"+str(page)+"_M1"),types.InlineKeyboardButton("⏰ M2"+(" ✅" if expiry=="M2" else ""), callback_data="expiry_"+market+"_"+str(page)+"_M2"))
+    kb.row(types.InlineKeyboardButton("⏰ M3"+(" ✅" if expiry=="M3" else ""), callback_data="expiry_"+market+"_"+str(page)+"_M3"),types.InlineKeyboardButton("⏰ M5"+(" ✅" if expiry=="M5" else ""), callback_data="expiry_"+market+"_"+str(page)+"_M5"))
     nav=[]
     if page>0:
         nav.append(types.InlineKeyboardButton("⬅️ Prev", callback_data="nav_"+market+"_"+str(page-1)+"_"+expiry))
@@ -136,7 +137,7 @@ def pairs_kb(market, page=0, expiry="M1"):
         nav.append(types.InlineKeyboardButton("Next ➡️", callback_data="nav_"+market+"_"+str(page+1)+"_"+expiry))
     if nav:
         kb.add(*nav)
-    kb.add(types.InlineKeyboardButton("⬅️ Back", callback_data="get_signal"))
+    kb.add(types.InlineKeyboardButton("⬅️ Back Market", callback_data="market_"+market))
     return kb
 
 def gen_signal(pair, expiry, uid):
@@ -344,27 +345,41 @@ def callback(c):
         bot.edit_message_text(txt, c.message.chat.id, c.message.message_id, parse_mode="Markdown", reply_markup=kb)
         return
     if data.startswith("nav_") or data.startswith("expiry_"):
-        parts=data.split("_")
-        market=parts[1]
-        page=int(parts[2])
-        expiry=parts[3]
-        bot.edit_message_reply_markup(c.message.chat.id, c.message.message_id, reply_markup=pairs_kb(market,page,expiry))
+        try:
+            parts=data.split("_")
+            market=parts[1]
+            page=int(parts[2])
+            expiry=parts[3]
+            bot.answer_callback_query(c.id, "Expiry "+expiry)
+            bot.edit_message_reply_markup(c.message.chat.id, c.message.message_id, reply_markup=pairs_kb(market,page,expiry))
+        except:
+            bot.answer_callback_query(c.id,"Error")
         return
     if data.startswith("pick_"):
-        parts=data.split("_")
-        market=parts[1]
-        pair=parts[2]
-        expiry=parts[3]
-        can, reason = can_get_signal(c.from_user.id)
-        if not can and reason=="limit":
-            bot.answer_callback_query(c.id,"Limit reached")
-            return
-        txt, action = gen_signal(pair, expiry, c.from_user.id)
-        u["daily_used"]+=1
-        save()
-        kb=types.InlineKeyboardMarkup(row_width=3)
-        kb.add(types.InlineKeyboardButton("✅ WIN", callback_data="win_"+pair+"_"+expiry),types.InlineKeyboardButton("❌ LOSS", callback_data="loss_"+pair+"_"+expiry),types.InlineKeyboardButton("🔥 Next Signal", callback_data="get_signal"))
-        bot.edit_message_text(txt, c.message.chat.id, c.message.message_id, parse_mode="Markdown", reply_markup=kb)
+        # pick_market_pair_expiry_page - pair may contain spaces
+        try:
+            # remove prefix pick_
+            rest=data[5:]
+            # market is first token before _
+            market=rest.split("_")[0]
+            # remaining after market_
+            rem=rest[len(market)+1:]
+            # last _page and _expiry from end
+            page=int(rem.split("_")[-1])
+            expiry=rem.split("_")[-2]
+            pair="_".join(rem.split("_")[:-2])
+            can, reason = can_get_signal(c.from_user.id)
+            if not can and reason=="limit":
+                bot.answer_callback_query(c.id,"Limit reached")
+                return
+            txt, action = gen_signal(pair, expiry, c.from_user.id)
+            u["daily_used"]+=1
+            save()
+            kb=types.InlineKeyboardMarkup(row_width=3)
+            kb.add(types.InlineKeyboardButton("✅ WIN", callback_data="win_"+pair+"_"+expiry),types.InlineKeyboardButton("❌ LOSS", callback_data="loss_"+pair+"_"+expiry),types.InlineKeyboardButton("🔥 Next Signal", callback_data="get_signal"))
+            bot.edit_message_text(txt, c.message.chat.id, c.message.message_id, parse_mode="Markdown", reply_markup=kb)
+        except Exception as e:
+            bot.answer_callback_query(c.id,"Error "+str(e))
         return
     if data.startswith("win_") or data.startswith("loss_"):
         is_win=data.startswith("win_")
@@ -418,9 +433,12 @@ def callback(c):
             levels_count[uu["level"]]=levels_count.get(uu["level"],0)+1
         gwr_w=sum(uu["total_w"] for uu in DB["users"].values())
         gwr_l=sum(uu["total_l"] for uu in DB["users"].values())
-        txt="👑 *Admin*\nUsers: "+str(len(DB["users"]))+"\nLevels: "+str(levels_count)+"\nBanned: "+str(len(DB["banned"]))+"\nGWR: "+str(gwr_w)+"W/"+str(gwr_l)+"L"
+        txt="👑 *Admin Panel V14.1*\nUsers: "+str(len(DB["users"]))+"\nLevels: "+str(levels_count)+"\nBanned: "+str(len(DB["banned"]))+"\nGWR: "+str(gwr_w)+"W/"+str(gwr_l)+"L"
         kb=types.InlineKeyboardMarkup(row_width=2)
-        kb.add(types.InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast"),types.InlineKeyboardButton("👥 Users", callback_data="admin_users"),types.InlineKeyboardButton("📊 Stats", callback_data="admin_stats"),types.InlineKeyboardButton("🔄 Reset Daily All", callback_data="admin_reset_daily"))
+        kb.add(types.InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast"),types.InlineKeyboardButton("👥 Users", callback_data="admin_users"))
+        kb.add(types.InlineKeyboardButton("📊 Stats", callback_data="admin_stats"),types.InlineKeyboardButton("🔄 Reset Daily All", callback_data="admin_reset_daily"))
+        kb.add(types.InlineKeyboardButton("👤 Add User", callback_data="admin_adduser"),types.InlineKeyboardButton("🚫 Ban/Unban", callback_data="admin_ban"))
+        kb.add(types.InlineKeyboardButton("🔍 Search/Such", callback_data="admin_search"),types.InlineKeyboardButton("⬅️ Back", callback_data="back_main"))
         bot.edit_message_text(txt, c.message.chat.id, c.message.message_id, parse_mode="Markdown", reply_markup=kb)
         return
     if data=="admin_users":
@@ -454,6 +472,21 @@ def callback(c):
         save()
         bot.answer_callback_query(c.id,"Daily reset done for all")
         return
+    if data=="admin_adduser":
+        DB["_admin_wait"][uid]="adduser"
+        save()
+        bot.edit_message_text("👤 *Add User*\n\nSend like:\n`123456789 50`\nID + deposit\n50 = PRO, 100 = VIP", c.message.chat.id, c.message.message_id, parse_mode="Markdown")
+        return
+    if data=="admin_ban":
+        DB["_admin_wait"][uid]="ban"
+        save()
+        bot.edit_message_text("🚫 *Ban/Unban*\n\nSend:\n`ban 123456`\n`unban 123456`\nOr just ID to ban", c.message.chat.id, c.message.message_id, parse_mode="Markdown")
+        return
+    if data=="admin_search":
+        DB["_admin_wait"][uid]="search"
+        save()
+        bot.edit_message_text("🔍 *Search User*\n\nSend user ID:\n`123456789`", c.message.chat.id, c.message.message_id, parse_mode="Markdown")
+        return
     if data=="admin_broadcast":
         kb=types.InlineKeyboardMarkup(row_width=3)
         kb.add(types.InlineKeyboardButton("1 Day", callback_data="bcast_del_24"),types.InlineKeyboardButton("1 Week", callback_data="bcast_del_168"),types.InlineKeyboardButton("1 Month", callback_data="bcast_del_720"))
@@ -483,6 +516,63 @@ def callback(c):
 
 @bot.message_handler(content_types=['text','photo','document','video'])
 def broadcast_content(m):
+    uid=str(m.from_user.id)
+    # Admin wait states first (AddUser / Ban / Search)
+    if uid==str(OWNER) and uid in DB.get("_admin_wait",{}):
+        state=DB["_admin_wait"][uid]
+        txt=m.text or ""
+        if state=="adduser":
+            try:
+                parts=txt.split()
+                nid=parts[0]
+                dep=float(parts[1]) if len(parts)>1 else 0
+                u=ensure(nid)
+                u["deposit"]=dep
+                u["level"]=get_level(dep)
+                u["registered"]=True
+                save()
+                bot.send_message(m.chat.id,"✅ Added "+nid+" level "+u["level"]+" deposit $"+str(dep), reply_markup=main_kb(m.from_user.id))
+            except Exception as e:
+                bot.send_message(m.chat.id,"❌ Format error. Send: ID deposit e.g. 12345 100")
+            DB["_admin_wait"].pop(uid,None)
+            save()
+            return
+        if state=="ban":
+            try:
+                parts=txt.lower().split()
+                if parts[0]=="unban" and len(parts)>1:
+                    if parts[1] in DB["banned"]:
+                        DB["banned"].remove(parts[1])
+                        save()
+                    bot.send_message(m.chat.id,"✅ Unbanned "+parts[1], reply_markup=main_kb(m.from_user.id))
+                elif parts[0]=="ban" and len(parts)>1:
+                    if parts[1] not in DB["banned"]:
+                        DB["banned"].append(parts[1])
+                        save()
+                    bot.send_message(m.chat.id,"✅ Banned "+parts[1], reply_markup=main_kb(m.from_user.id))
+                else:
+                    nid=parts[0]
+                    if nid not in DB["banned"]:
+                        DB["banned"].append(nid)
+                        save()
+                    bot.send_message(m.chat.id,"✅ Banned "+nid, reply_markup=main_kb(m.from_user.id))
+            except:
+                bot.send_message(m.chat.id,"Error")
+            DB["_admin_wait"].pop(uid,None)
+            save()
+            return
+        if state=="search":
+            nid=txt.split()[0]
+            u=DB["users"].get(nid)
+            if u:
+                wr=(u["total_w"]/(u["total_w"]+u["total_l"])*100) if (u["total_w"]+u["total_l"])>0 else 0
+                bot.send_message(m.chat.id,"🔍 User "+nid+"\nLevel "+u["level"]+"\nDeposit $"+str(u["deposit"])+"\nD W/L "+str(u["daily_w"])+"/"+str(u["daily_l"])+"\nGWR "+str(u["total_w"])+"/"+str(u["total_l"])+" WR "+str(round(wr,1))+"%\nBanned "+str(nid in DB["banned"])+"\nUsername @"+str(u.get("username","")), reply_markup=main_kb(m.from_user.id))
+            else:
+                bot.send_message(m.chat.id,"❌ Not found "+nid, reply_markup=main_kb(m.from_user.id))
+            DB["_admin_wait"].pop(uid,None)
+            save()
+            return
+    # Broadcast wait
     if str(m.from_user.id)!=str(OWNER):
         return
     wait=DB["_bcast_wait"].get(str(m.from_user.id))
