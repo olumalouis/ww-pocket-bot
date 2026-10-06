@@ -341,7 +341,8 @@ def callback(c):
             u["daily_l"]+=1; u["total_l"]+=1; u["loss_streak"]+=1; u["streak"]=0
             if u["loss_streak"]>=6: txt="⚠️⚠️ MARKET NOT STABLE — STOP NOW! ⚠️⚠️ 🚨\n💔 "+str(u["loss_streak"])+" LOSSES IN A ROW — RED ALERT! ⛔\n☕ TAKE BREAK 30-60 min! 🧘"
             else: mot=random.choice(MOTIV); txt="💔 LOSS "+str(u["loss_streak"])+"/5 — "+mot+" — Next is WIN! 🚀 Daily W:"+str(u["daily_w"])+" L:"+str(u["daily_l"])+" 📊"
-        save(); bot.answer_callback_query(c.id, "✅ Recorded"); bot.edit_message_text(txt, c.message.chat.id, c.message.message_id, reply_markup=main_kb(c.from_user.id)); return    if data=="upgrade" or data=="deposit":
+        save(); bot.answer_callback_query(c.id, "✅ Recorded"); bot.edit_message_text(txt, c.message.chat.id, c.message.message_id, reply_markup=main_kb(c.from_user.id)); return
+        if data=="upgrade" or data=="deposit":
         link=build_aff_link(uid); txt="💎 *UPGRADE LEVELS* 🚀\n\n🌱 NONE: 5/day 55-65% FREE 🎁\n📈 STARTER $20: 20/day 65-70% 💰\n💎 PRO $50: 100/day 70-80% 🔥\n👑 VIP $100: UNLIMITED 80-87% 🚀\n\nYour Level: "+u["level"]+" 👑 Deposit: $"+str(u["deposit"])+" 💰\n"
         kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("🔗 Register / Deposit Now 🚀", url=link)); kb.add(types.InlineKeyboardButton("⬅️ Back 🔙", callback_data="back_main"))
         bot.edit_message_text(txt, c.message.chat.id, c.message.message_id, parse_mode="Markdown", reply_markup=kb); return
