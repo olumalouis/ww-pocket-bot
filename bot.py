@@ -336,13 +336,13 @@ def callback(c):
         return
     if data.startswith("win_") or data.startswith("loss_"):
         is_win=data.startswith("win_")
-        if is_win: u["daily_w"]+=1; u["total_w"]+=1; u["streak"]+=1; u["loss_streak"]=0; txt="🎉 BOOM! WIN! 🔥🔥🔥 Streak "+str(u["streak"])+" 🚀 | Daily W:"+str(u["daily_w"])+" L:"+str(u["daily_l"])+" 📊"
+        if is_win: u["daily_w"]+=1; u["total_w"]+=1; u["streak"]+=1; u["loss_streak"]=0; u["gwr"]+=1
         else:
             u["daily_l"]+=1; u["total_l"]+=1; u["loss_streak"]+=1; u["streak"]=0
-            if u["loss_streak"]>=6: txt="⚠️⚠️ MARKET NOT STABLE — STOP NOW! ⚠️⚠️ 🚨\n💔 "+str(u["loss_streak"])+" LOSSES IN A ROW — RED ALERT! ⛔\n☕ TAKE BREAK 30-60 min! 🧘"
-            else: mot=random.choice(MOTIV); txt="💔 LOSS "+str(u["loss_streak"])+"/5 — "+mot+" — Next is WIN! 🚀 Daily W:"+str(u["daily_w"])+" L:"+str(u["daily_l"])+" 📊"
-        save(); bot.answer_callback_query(c.id, "✅ Recorded"); bot.edit_message_text(txt, c.message.chat.id, c.message.message_id, reply_markup=main_kb(c.from_user.id)); return
-        if data=="upgrade" or data=="deposit":
+            if u["loss_streak"]>=6: time.sleep(300)
+            else: mot=random.choice(MOTS); bot.send_message(c.message.chat.id, mot)
+        save(); bot.answer_callback_query(c.id,"✅ Recorded"); return
+    if data=="upgrade" or data=="deposit":
         link=build_aff_link(uid); txt="💎 *UPGRADE LEVELS* 🚀\n\n🌱 NONE: 5/day 55-65% FREE 🎁\n📈 STARTER $20: 20/day 65-70% 💰\n💎 PRO $50: 100/day 70-80% 🔥\n👑 VIP $100: UNLIMITED 80-87% 🚀\n\nYour Level: "+u["level"]+" 👑 Deposit: $"+str(u["deposit"])+" 💰\n"
         kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("🔗 Register / Deposit Now 🚀", url=link)); kb.add(types.InlineKeyboardButton("⬅️ Back 🔙", callback_data="back_main"))
         bot.edit_message_text(txt, c.message.chat.id, c.message.message_id, parse_mode="Markdown", reply_markup=kb); return
@@ -355,6 +355,18 @@ def callback(c):
         lim=LEVELS[u["level"]]["limit"]; lim_str=str(lim) if lim<999999 else "∞"
         bot.edit_message_text("👋 Welcome "+c.from_user.first_name+"! 👑 "+u["level"]+" 📊 "+str(u["daily_used"])+"/"+lim_str+" Used Today 🚀", c.message.chat.id, c.message.message_id, reply_markup=main_kb(c.from_user.id)); return
     if data=="admin":
+        if str(c.from_user.id)!=str(OWNER): bot.answer_callback_query(c.id,"⛔ Owner only 👑"); return
+        levels_count={"LOCKED":0,"NONE":0,"STARTER":0,"PRO":0,"VIP":0}
+        for uu in DB["users"].values(): levels_count[uu["level"]]=levels_count.get(uu["level"],0)+1
+        gwr_w=sum(uu["total_w"] for uu in DB["users"].values()); gwr_l=sum(uu["total_l"] for uu in DB["users"].values())
+        txt="👑 *Admin Panel V14.3 - 3 Indicators* ⚙️\nUsers: "+str(len(DB["users"]))+" 👥\nLevels: "+str(levels_count)+" 📊\nBanned: "+str(len(DB["banned"]))+" ⛔\nGWR: "+str(gwr_w)+"W/"+str(gwr_l)+"L 🌍\nREAL 25 (24/5) 📈 + OTC 35 (24/7) 🌙 + Real Price API 💹"
+        kb=types.InlineKeyboardMarkup(row_width=2)
+        kb.add(types.InlineKeyboardButton("📢 Broadcast 📣", callback_data="admin_broadcast"),types.InlineKeyboardButton("👥 Users 👤", callback_data="admin_users"))
+        kb.add(types.InlineKeyboardButton("📊 Stats 📈", callback_data="admin_stats"),types.InlineKeyboardButton("🔄 Reset Daily All ♻️", callback_data="admin_reset_daily"))
+        kb.add(types.InlineKeyboardButton("👤 Add User ➕", callback_data="admin_adduser"),types.InlineKeyboardButton("🚫 Ban/Unban 🔨", callback_data="admin_ban"))
+        kb.add(types.InlineKeyboardButton("🔍 Search/Such 🔎", callback_data="admin_search"),types.InlineKeyboardButton("⬅️ Back 🔙", callback_data="back_main"))
+        bot.edit_message_text(txt, c.message.chat.id, c.message.message_id, parse_mode="Markdown", reply_markup=kb); return
+    if data=="admin_users":
         if str(c.from_user.id)!=str(OWNER): bot.answer_callback_query(c.id,"⛔ Owner only 👑"); return
         levels_count={"LOCKED":0,"NONE":0,"STARTER":0,"PRO":0,"VIP":0}
         for uu in DB["users"].values(): levels_count[uu["level"]]=levels_count.get(uu["level"],0)+1
