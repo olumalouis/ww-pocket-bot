@@ -50,7 +50,8 @@ def is_real_open():
     if wd == 5: return False
     if wd == 6: return False
     if wd == 4 and now.hour >= 22: return False
-    return True def build_aff_link(uid):
+    return True
+    def build_aff_link(uid):
     uid=str(uid)
     base=AFF_BASE
     if "{id}" in base: return base.replace("{id}",uid)
