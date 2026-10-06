@@ -151,11 +151,11 @@ def gen_signal_manual(pair):
     stoch=random.randint(10,90)
     direction, strength, rsi_sig, ema_sig, stoch_sig, conf=check_3_indicators_logic(rsi, price, ema200, stoch)
     return pair, direction, strength, rsi, ema_sig, stoch, price, conf
-    @app.route("/")
+@app.route("/")
 def home():
     return "WW POCKET SIGNALS BOT V14.3 FINAL RUNNING 🚀"
 
-    @app.route("/postback")
+@app.route("/postback")
 def postback():
     click_id=request.args.get("click_id") or request.args.get("subid")
     deposit=request.args.get("deposit", default=0, type=float)
