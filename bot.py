@@ -33,7 +33,6 @@ WAIT_STATE={}
 PAIRS_REAL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","USD/CHF","NZD/USD","EUR/JPY","EUR/GBP","EUR/AUD","EUR/CAD","EUR/CHF","GBP/JPY","GBP/AUD","GBP/CAD","AUD/JPY","AUD/CAD","AUD/CHF","CHF/JPY","CAD/JPY","NZD/JPY","EUR/NZD","GBP/NZD","USD/NOK","USD/SGD"]
 PAIRS_OTC=["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","EUR/JPY OTC","GBP/JPY OTC","AUD/USD OTC","USD/CAD OTC","EUR/GBP OTC","EUR/AUD OTC","GBP/AUD OTC","AUD/JPY OTC","AUD/CAD OTC","EUR/CAD OTC","GBP/CAD OTC","NZD/USD OTC","EUR/NZD OTC","GBP/NZD OTC","AUD/NZD OTC","NZD/JPY OTC","NZD/CAD OTC","USD/CHF OTC","EUR/CHF OTC","GBP/CHF OTC","CHF/JPY OTC","CAD/JPY OTC","CAD/CHF OTC","USD/NOK OTC","EUR/NOK OTC","USD/SEK OTC","EUR/SEK OTC","USD/MXN OTC","USD/SGD OTC","USD/HKD OTC","USD/TRY OTC","USD/ZAR OTC"]
 
-# ✅ FIX 5: NEW FUN MOTIVATIONAL LOSS MESSAGES - NOT BORING!
 MOTS=[
 "💪 First punch! Champions get hit then HIT BACK! Next = WIN! 🎯",
 "😤 2 down? Market testing you Boss! Diamond hands! 💎 Next is yours! 🚀",
@@ -76,29 +75,26 @@ def is_real_market_open():
 
 PRICE_CACHE={}
 def get_real_price_twelvedata(pair):
-    clean=pair.replace(" OTC","").replace("/","")
+    # ✅ FIXED: Correct symbol - was EURUSD/USD now EUR/USD
+    base_symbol = pair.replace(" OTC","").strip()
+    clean_noslash = base_symbol.replace("/","")
     now_ts=time.time()
-    if clean in PRICE_CACHE and now_ts-PRICE_CACHE[clean][0]<10:
-        return PRICE_CACHE[clean][1]
+    if clean_noslash in PRICE_CACHE and now_ts-PRICE_CACHE[clean_noslash][0]<10:
+        return PRICE_CACHE[clean_noslash][1]
     try:
-        url=f"https://api.twelvedata.com/price?symbol={clean}/USD&apikey={TWELVE_API}"
-        r=requests.get(url, timeout=4).json()
+        url=f"https://api.twelvedata.com/price?symbol={base_symbol}&apikey={TWELVE_API}&format=JSON"
+        r=requests.get(url, timeout=5).json()
         if "price" in r and r["price"]:
             price=float(r["price"])
-            PRICE_CACHE[clean]=(now_ts, price)
+            PRICE_CACHE[clean_noslash]=(now_ts, price)
             return price
-        if "BTC" in clean or "ETH" in clean:
-            url2=f"https://api.twelvedata.com/price?symbol={clean}&apikey={TWELVE_API}"
-            r2=requests.get(url2, timeout=4).json()
-            if "price" in r2:
-                price=float(r2["price"])
-                PRICE_CACHE[clean]=(now_ts, price)
-                return price
     except Exception as e:
-        print(f"Twelve error {e}")
+        print(f"Twelve error {e} for {base_symbol}")
     base={"EURUSD":1.08,"GBPUSD":1.26,"USDJPY":155.0,"AUDUSD":0.66,"USDCAD":1.36,"USDCHF":0.90,"NZDUSD":0.61,"EURJPY":168.0,"EURGBP":0.85,"GBPJPY":197.0,"BTCUSD":67000,"ETHUSD":3500}
-    b=base.get(clean,1.10)
-    return round(b+random.uniform(-0.002,0.002),5)
+    b=base.get(clean_noslash,1.10)
+    fallback=round(b+random.uniform(-0.002,0.002),5)
+    PRICE_CACHE[clean_noslash]=(now_ts, fallback)
+    return fallback
 
 def check_3_indicators_logic(rsi, price, ema200, stoch):
     rsi_sig="NEUTRAL"
