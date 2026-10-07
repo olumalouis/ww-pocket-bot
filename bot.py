@@ -384,6 +384,25 @@ def cb(c):
         kb.add(types.InlineKeyboardButton("👤 Add User", callback_data="admin_adduser"), types.InlineKeyboardButton("🚫 Ban/Unban", callback_data="admin_ban"))
         kb.add(types.InlineKeyboardButton("🔍 Search", callback_data="admin_search"), types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
         msg=bot.send_message(chat_id, "👑 ADMIN PANEL ⚙️", reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; try_delete(chat_id, c.message.message_id); return
+    # ✅ FIXED: bcast_ and btarget_ MOVED OUTSIDE admin_ check - Now won't get stuck!
+    if c.data.startswith("bcast_"):
+        if uid!=OWNER_ID: return
+        hours=int(c.data.split("_")[1]); WAIT_STATE[uid]={"step":"broadcast_target","hours":hours}
+        kb=types.InlineKeyboardMarkup(row_width=2)
+        kb.add(types.InlineKeyboardButton("ALL", callback_data="btarget_ALL"), types.InlineKeyboardButton("NONE", callback_data="btarget_NONE"))
+        kb.add(types.InlineKeyboardButton("STARTER", callback_data="btarget_STARTER"), types.InlineKeyboardButton("PRO", callback_data="btarget_PRO"))
+        kb.add(types.InlineKeyboardButton("VIP", callback_data="btarget_VIP"))
+        bot.send_message(chat_id, f"✅ Delete in {hours}h selected!\n\n📢 Step 2: Select target level:", reply_markup=kb)
+        try_delete(chat_id, c.message.message_id)
+        bot.answer_callback_query(c.id)
+        return
+    if c.data.startswith("btarget_"):
+        if uid!=OWNER_ID: return
+        target=c.data.split("_")[1]; ws=WAIT_STATE.get(uid,{}); hours=ws.get("hours",0); WAIT_STATE[uid]={"step":"broadcast_content","hours":hours,"target":target}
+        bot.send_message(chat_id, f"✅ Target: {target} | Delete: {hours}h\n\n📢 Step 3: Send content now (text/photo/video/doc)")
+        try_delete(chat_id, c.message.message_id)
+        bot.answer_callback_query(c.id)
+        return
     if c.data.startswith("admin_"):
         if uid!=OWNER_ID: return
         if c.data=="admin_users":
@@ -413,16 +432,6 @@ def cb(c):
             WAIT_STATE[uid]={"step":"admin_ban"}; bot.send_message(chat_id, "🚫 Ban/Unban:\nSend `ban 123456` or `unban 123456`")
         elif c.data=="admin_search":
             WAIT_STATE[uid]={"step":"admin_search"}; bot.send_message(chat_id, "🔍 Search:\nSend user_id e.g. `123456`")
-        elif c.data.startswith("bcast_"):
-            hours=int(c.data.split("_")[1]); WAIT_STATE[uid]={"step":"broadcast_target","hours":hours}
-            kb=types.InlineKeyboardMarkup(row_width=2)
-            kb.add(types.InlineKeyboardButton("ALL", callback_data="btarget_ALL"), types.InlineKeyboardButton("NONE", callback_data="btarget_NONE"))
-            kb.add(types.InlineKeyboardButton("STARTER", callback_data="btarget_STARTER"), types.InlineKeyboardButton("PRO", callback_data="btarget_PRO"))
-            kb.add(types.InlineKeyboardButton("VIP", callback_data="btarget_VIP"))
-            bot.send_message(chat_id, f"Delete in {hours}h. Step 2: Select target level:", reply_markup=kb)
-        elif c.data.startswith("btarget_"):
-            target=c.data.split("_")[1]; ws=WAIT_STATE.get(uid,{}); hours=ws.get("hours",0); WAIT_STATE[uid]={"step":"broadcast_content","hours":hours,"target":target}
-            bot.send_message(chat_id, f"Target: {target} Delete: {hours}h\nStep 3: Send content now (text/photo/video/doc)")
         bot.answer_callback_query(c.id); return
 
 @bot.message_handler(content_types=['text','photo','video','document'])
@@ -487,4 +496,3 @@ if __name__=="__main__":
     while True:
         try: bot.infinity_polling(timeout=60, long_polling_timeout=60)
         except Exception as e: print(f"Polling error {e}, restart in 5s"); time.sleep(5)
-
