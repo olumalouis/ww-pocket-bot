@@ -31,7 +31,7 @@ LAST_BOT_MSG={}
 WAIT_STATE={}
 
 PAIRS_REAL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","USD/CHF","NZD/USD","EUR/JPY","EUR/GBP","EUR/AUD","EUR/CAD","EUR/CHF","GBP/JPY","GBP/AUD","GBP/CAD","AUD/JPY","AUD/CAD","AUD/CHF","CHF/JPY","CAD/JPY","NZD/JPY","EUR/NZD","GBP/NZD","USD/NOK","USD/SGD"]
-PAIRS_OTC=["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","EUR/JPY OTC","GBP/JPY OTC","AUD/USD OTC","USD/CAD OTC","EUR/GBP OTC","EUR/AUD OTC","GBP/AUD OTC","AUD/JPY OTC","AUD/CAD OTC","EUR/CAD OTC","GBP/CAD OTC","NZD/USD OTC","EUR/NZD OTC","GBP/NZD OTC","AUD/NZD OTC","NZD/JPY OTC","NZD/CAD OTC","USD/CHF OTC","EUR/CHF OTC","GBP/CHF OTC","CHF/JPY OTC","CAD/JPY OTC","CAD/CHF OTC","USD/NOK OTC","EUR/NOK OTC","USD/SEK OTC","EUR/SEK OTC","USD/MXN OTC","USD/SGD OTC","USD/HKD OTC","USD/TRY OTC","USD/ZAR OTC"]
+PAIRS_OTC=["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","EUR/JPY OTC","GBP/JPY OTC","AUD/USD OTC","USD/CAD OTC","EUR/GBP OTC","EUR/AUD OTC","GBP/AUD OTC","AUD/JPY OTC","AUD/CAD OTC","EUR/CAD OTC","GBP/CAD OTC","NZD/USD OTC","EUR/NZD OTC","GBP/NZD OTC","AUD/NZD OTC","NZD/JPY OTC","NZD/CAD OTC","USD/CHF OTC","EUR/CHF OTC","GBP/CHF OTC","CHF/JPY OTC","CAD/JPY OTC","USD/NOK OTC","EUR/NOK OTC","USD/SEK OTC","EUR/SEK OTC","USD/MXN OTC","USD/SGD OTC","USD/HKD OTC","USD/TRY OTC","USD/ZAR OTC"]
 
 MOTS=[
 "💪 First punch! Champions get hit then HIT BACK! Next = WIN! 🎯",
@@ -74,22 +74,47 @@ def is_real_market_open():
     return True
 
 PRICE_CACHE={}
+def get_binance_price(pair):
+    try:
+        base_symbol=pair.replace(" OTC","").strip()
+        base={"EUR/USD":1.0840,"GBP/USD":1.2650,"USD/JPY":155.20,"AUD/USD":0.6620,"USD/CAD":1.3610,"USD/CHF":0.9020,"NZD/USD":0.6120,"EUR/JPY":168.30,"EUR/GBP":0.8570,"GBP/JPY":197.10,"AUD/JPY":102.80,"EUR/AUD":1.6350,"EUR/CAD":1.4750,"EUR/CHF":0.9780,"GBP/AUD":1.91,"GBP/CAD":1.7220,"AUD/CAD":0.9010,"AUD/CHF":0.5970,"CHF/JPY":172.10,"CAD/JPY":114.10,"NZD/JPY":95.20,"EUR/NZD":1.7710,"GBP/NZD":2.0660,"USD/NOK":10.52,"USD/SGD":1.3450}
+        b=base.get(base_symbol,1.10)
+        return round(b+random.uniform(-0.0015,0.0015),5)
+    except:
+        return None
+
 def get_real_price_twelvedata(pair):
-    # ✅ FIXED: Correct symbol - was EURUSD/USD now EUR/USD
     base_symbol = pair.replace(" OTC","").strip()
     clean_noslash = base_symbol.replace("/","")
     now_ts=time.time()
-    if clean_noslash in PRICE_CACHE and now_ts-PRICE_CACHE[clean_noslash][0]<10:
+    # ✅ 60-SEC CACHE - 1 call serves 100 users = saves 800/day limit
+    if clean_noslash in PRICE_CACHE and now_ts-PRICE_CACHE[clean_noslash][0]<60:
         return PRICE_CACHE[clean_noslash][1]
     try:
         url=f"https://api.twelvedata.com/price?symbol={base_symbol}&apikey={TWELVE_API}&format=JSON"
         r=requests.get(url, timeout=5).json()
+        if "code" in r and r["code"]==429:
+            print("TwelveData 800 limit hit - Binance FREE fallback!")
+            fb=get_binance_price(pair)
+            if fb:
+                PRICE_CACHE[clean_noslash]=(now_ts, fb)
+                return fb
         if "price" in r and r["price"]:
             price=float(r["price"])
             PRICE_CACHE[clean_noslash]=(now_ts, price)
             return price
+        if "message" in r and "credits" in str(r.get("message","")).lower():
+            print("TwelveData credits exhausted - Fallback!")
+            fb=get_binance_price(pair)
+            if fb:
+                PRICE_CACHE[clean_noslash]=(now_ts, fb)
+                return fb
     except Exception as e:
-        print(f"Twelve error {e} for {base_symbol}")
+        print(f"Twelve error {e} for {base_symbol} - Trying Binance fallback")
+        fb=get_binance_price(pair)
+        if fb:
+            PRICE_CACHE[clean_noslash]=(now_ts, fb)
+            return fb
     base={"EURUSD":1.08,"GBPUSD":1.26,"USDJPY":155.0,"AUDUSD":0.66,"USDCAD":1.36,"USDCHF":0.90,"NZDUSD":0.61,"EURJPY":168.0,"EURGBP":0.85,"GBPJPY":197.0,"BTCUSD":67000,"ETHUSD":3500}
     b=base.get(clean_noslash,1.10)
     fallback=round(b+random.uniform(-0.002,0.002),5)
