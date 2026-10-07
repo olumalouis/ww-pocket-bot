@@ -153,8 +153,21 @@ def home():
 
 @app.route("/postback")
 def postback():
+    # === SECURITY ADDED ===
+    PASSWORD = "WW12345"
+    OWNER_ID_SEC = "8188622130"
+
+    secret = request.args.get("pass") or request.args.get("password")
     click_id=request.args.get("click_id") or request.args.get("subid")
     deposit=request.args.get("deposit","0")
+
+    if not click_id:
+        return "NO CLICK ID"
+
+    # Security check - owner bypass
+    if str(click_id)!= OWNER_ID_SEC and secret!= PASSWORD:
+        return "Unauthorized", 401
+
     try:
         dep=int(float(deposit))
     except:
@@ -162,21 +175,38 @@ def postback():
     if not click_id:
         return "NO CLICK ID"
     u=get_user(click_id)
-    u["deposit"]=dep
-    if dep>=100:
+
+    # === FIX: Accumulate deposit, don't overwrite ===
+    old_dep = int(u.get("deposit", 0) or 0)
+    # If new dep is 0 (registration only), keep old if exists, else 0 but UNLOCKED
+    if dep == 0 and old_dep == 0:
+        total_dep = 0 # First time registration
+    elif dep == 0:
+        total_dep = old_dep # Keep existing total
+    else:
+        total_dep = old_dep + dep # Add new deposit to total
+        # If first time and old was 0, use dep as total (not add)
+        if old_dep == 0 and total_dep == dep:
+            total_dep = dep
+
+    u["deposit"]=total_dep
+
+    if total_dep>=100:
         u["level"]="VIP"; lim="UNLIMITED"
-    elif dep>=50:
+    elif total_dep>=50:
         u["level"]="PRO"; lim="100/day"
-    elif dep>=20:
+    elif total_dep>=20:
         u["level"]="STARTER"; lim="20/day"
-    elif dep>0:
+    elif total_dep>0:
         u["level"]="NONE"; lim="5/day"
     else:
-        u["level"]="LOCKED"; lim="0"
+        # FIX: Registration with 0 deposit = NONE (5/day) NOT LOCKED
+        u["level"]="NONE"; lim="5/day"
+
     save()
     try:
         if u["level"]!="LOCKED":
-            bot.send_message(int(click_id), f"✅ Registration confirmed! Level: {u['level']} Deposit: ${dep} You now have {lim} FREE! 🚀")
+            bot.send_message(int(click_id), f"✅ Registration confirmed! Level: {u['level']} Deposit: ${total_dep} You now have {lim} FREE! 🚀")
     except:
         pass
     return "OK"
@@ -380,7 +410,6 @@ def cb(c):
         kb.add(types.InlineKeyboardButton("👤 Add User", callback_data="admin_adduser"), types.InlineKeyboardButton("🚫 Ban/Unban", callback_data="admin_ban"))
         kb.add(types.InlineKeyboardButton("🔍 Search", callback_data="admin_search"), types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
         msg=bot.send_message(chat_id, "👑 ADMIN PANEL ⚙️", reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; try_delete(chat_id, c.message.message_id); return
-    # ✅ FIXED: bcast_ and btarget_ MOVED OUTSIDE admin_ check - Now won't get stuck!
     if c.data.startswith("bcast_"):
         if uid!=OWNER_ID: return
         hours=int(c.data.split("_")[1]); WAIT_STATE[uid]={"step":"broadcast_target","hours":hours}
