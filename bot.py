@@ -494,11 +494,25 @@ def daily_reset_loop():
             save(); time.sleep(61)
         time.sleep(30)
 
+def run_flask():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), threaded=True)
+
+def delete_msg_later(chat_id, msg_id, delay_hours):
+    time.sleep(delay_hours*3600)
+    try_delete(chat_id, msg_id)
+
 if __name__=="__main__":
-    bot.remove_webhook()
+    try:
+        bot.remove_webhook()
+    except:
+        pass
     threading.Thread(target=daily_reset_loop, daemon=True).start()
-    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8080)), threaded=True)).start()
-    print(f"🚀 WW POCKET BOT V14.7 FIXED RUNNING with PROMO {PROMO_CODE} 60% + BUTTON LINKS")
+    threading.Thread(target=run_flask, daemon=True).start()
+    print(f"🚀 WW POCKET BOT V14.7 FIXED RUNNING with PROMO {PROMO_CODE} 60% + BUTTON LINKS 🔥")
     while True:
-        try: bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
-        except Exception as e: print(f"Polling error {e}, restart in 5s"); time.sleep(5)
+        try:
+            bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
+        except Exception as e:
+            print(f"⚠️ Polling error {e}, restart in 5s ⏳")
+            time.sleep(5)
+        
