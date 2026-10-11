@@ -173,7 +173,6 @@ def main_menu(uid):
     kb.add(types.InlineKeyboardButton("💎 Upgrade 💰", callback_data="upgrade"), types.InlineKeyboardButton("💰 Deposit 🔥", callback_data="deposit"))
     kb.add(types.InlineKeyboardButton("📈 My Status 📊", callback_data="status"), types.InlineKeyboardButton("📚 How it Works 📖", callback_data="how"))
     kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL), types.InlineKeyboardButton("📢 Channel", url=TELEGRAM_CHANNEL))
-    # REMOVED UNLOCK BUTTON - ANTI FAKE
     if str(uid)==OWNER_ID:
         kb.add(types.InlineKeyboardButton("👑 Admin Panel ⚙️", callback_data="admin"))
     return kb
@@ -253,31 +252,44 @@ def admin_cmd(m):
         bot.send_message(m.chat.id, f"📊 STATS:\nLOCKED:{counts['LOCKED']} NONE:{counts['NONE']} STARTER:{counts['STARTER']} PRO:{counts['PRO']} VIP:{counts['VIP']}\nBANNED:{counts['BANNED']}\n🌍 Global WR: {tw}W/{tl}L (WR {gwr}%)\nTraders verified: {len(TRADERS)}")
     elif txt.startswith("/ban"):
         try:
-            uid_=txt.split()[1]; get_user(uid_)["banned"]=True; save()
+            uid_=txt.split()[1]
+            get_user(uid_)["banned"]=True
+            save()
             bot.send_message(m.chat.id, f"🚫 Banned {uid_}")
-        except: bot.send_message(m.chat.id, "Usage: /ban 123")
+        except:
+            bot.send_message(m.chat.id, "Usage: /ban 123")
     elif txt.startswith("/unban"):
         try:
-            uid_=txt.split()[1]; get_user(uid_)["banned"]=False; save()
+            uid_=txt.split()[1]
+            get_user(uid_)["banned"]=False
+            save()
             bot.send_message(m.chat.id, f"✅ Unbanned {uid_}")
-        except: bot.send_message(m.chat.id, "Usage: /unban 123")
+        except:
+            bot.send_message(m.chat.id, "Usage: /unban 123")
     elif txt.startswith("/adduser"):
         try:
-            _, uid_, dep=txt.split(); u=get_user(uid_); u["deposit"]=int(dep)
+            _, uid_, dep=txt.split()
+            u=get_user(uid_)
+            u["deposit"]=int(dep)
             if int(dep)>=100: u["level"]="VIP"
             elif int(dep)>=50: u["level"]="PRO"
             elif int(dep)>=20: u["level"]="STARTER"
             else: u["level"]="NONE"
-            save(); bot.send_message(m.chat.id, f"👤 Added {uid_} with ${dep} -> {u['level']}")
-        except: bot.send_message(m.chat.id, "Usage: /adduser 123456 50")
+            save()
+            bot.send_message(m.chat.id, f"👤 Added {uid_} with ${dep} -> {u['level']}")
+        except:
+            bot.send_message(m.chat.id, "Usage: /adduser 123456 50")
     elif txt.startswith(("/search","/find","/such")):
         try:
-            uid_=txt.split()[1]; dat=get_user(uid_); tot=dat.get("total_w",0)+dat.get("total_l",0)
+            uid_=txt.split()[1]
+            dat=get_user(uid_)
+            tot=dat.get("total_w",0)+dat.get("total_l",0)
             wr=int(dat.get("total_w",0)/tot*100) if tot>0 else 0
             bot.send_message(m.chat.id, f"🔍 {uid_}:\nLevel:{dat.get('level')}\nDeposit:${dat.get('deposit')}\nD:{dat.get('daily_w')}/{dat.get('daily_l')}\nGWR:{dat.get('total_w',0)}/{dat.get('total_l',0)} WR:{wr}%\nBanned:{dat.get('banned')}\nUser:{dat.get('username')} {dat.get('first_name')}\nPocket:{dat.get('pocket_id','')}")
-        except: bot.send_message(m.chat.id, "Usage: /search 123")
+        except:
+            bot.send_message(m.chat.id, "Usage: /search 123")
 
-        @bot.callback_query_handler(func=lambda c: True)
+@bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     uid=str(c.from_user.id); u=get_user(uid); chat_id=c.message.chat.id
     if u.get("banned") and uid!=OWNER_ID:
