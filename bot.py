@@ -4,12 +4,11 @@ from flask import Flask, request
 import telebot
 from telebot import types
 
-BOT_TOKEN=os.environ.get("BOT_TOKEN","YOUR_TOKEN_HERE")
+BOT_TOKEN=os.environ.get("BOT_TOKEN")
 OWNER_ID="8188622130"
 DATA_FILE="db.json"
 TWELVE_API=os.environ.get("TWELVE_API","7fdda54e0e074a74b9ee0098ca2388c8")
 
-# === FINAL AFFILIATE + PROMO KVF341 ===
 AFFILIATE_BASE="https://u3.shortink.io/register?utm_campaign=868502&utm_source=affiliate&utm_medium=sr&a=jnLBWcb8IEyL7T&al=1801402&ac=wwpocket100&cid=984351"
 PROMO_CODE="KVF341"
 DEPOSIT_DIRECT="https://pocketoption.com/en/cabinet/deposit-step/1/"
@@ -22,51 +21,31 @@ bot=telebot.TeleBot(BOT_TOKEN, threaded=False)
 def load():
     if os.path.exists(DATA_FILE):
         try:
-            with open(DATA_FILE,"r") as f:
-                return json.load(f)
-        except:
-            return {}
+            with open(DATA_FILE,"r") as f: return json.load(f)
+        except: return {}
     return {}
-
 def save():
-    with open(DATA_FILE,"w") as f:
-        json.dump(USERS,f)
+    with open(DATA_FILE,"w") as f: json.dump(USERS,f)
 
 USERS=load()
 LAST_BOT_MSG={}
 WAIT_STATE={}
-
 PAIRS_REAL=["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","USD/CHF","NZD/USD","EUR/JPY","EUR/GBP","EUR/AUD","EUR/CAD","EUR/CHF","GBP/JPY","GBP/AUD","GBP/CAD","AUD/JPY","AUD/CAD","AUD/CHF","CHF/JPY","CAD/JPY","NZD/JPY","EUR/NZD","GBP/NZD","USD/NOK","USD/SGD","USD/TRY","USD/SEK","EUR/SEK","GBP/CHF","USD/MXN"]
 PAIRS_OTC=["EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","EUR/JPY OTC","GBP/JPY OTC","AUD/USD OTC","USD/CAD OTC","EUR/GBP OTC","EUR/AUD OTC","GBP/AUD OTC","AUD/JPY OTC","AUD/CAD OTC","EUR/CAD OTC","GBP/CAD OTC","NZD/USD OTC","EUR/NZD OTC","GBP/NZD OTC","AUD/NZD OTC","NZD/JPY OTC","NZD/CAD OTC","USD/CHF OTC","EUR/CHF OTC","GBP/CHF OTC","CHF/JPY OTC","CAD/JPY OTC","USD/NOK OTC","EUR/NOK OTC","USD/SEK OTC","EUR/SEK OTC","USD/MXN OTC","USD/SGD OTC","USD/HKD OTC","USD/TRY OTC","USD/ZAR OTC","BTC/USD OTC","ETH/USD OTC","USD/BRL OTC","EUR/SGD OTC","GBP/SGD OTC","EUR/TRY OTC","GBP/TRY OTC","USD/EGP OTC","LTC/USD OTC","XRP/USD OTC","BCH/USD OTC"]
-
-MOTS=[
-"💪 First punch! Champions get hit then HIT BACK! Next = WIN! 🎯",
-"😤 2 down? Market testing you Boss! Diamond hands! 💎 Next is yours! 🚀",
-"🧠 3 loss? Smart traders stay calm! 4th is MONEY! 💰 Breathe & win! 📈",
-"⚡️ 4 losses? Comeback story loading... 95% quit here, YOU WIN! 🔥",
-"🔥 5? Perfect! You're due! Law of averages = NEXT IS GREEN! 📈💵"
-]
+MOTS=["💪 First punch! Champions get hit then HIT BACK! Next = WIN! 🎯","😤 2 down? Market testing you Boss! Diamond hands! 💎 Next is yours! 🚀","🧠 3 loss? Smart traders stay calm! 4th is MONEY! 💰 Breathe & win! 📈","⚡️ 4 losses? Comeback story loading... 95% quit here, YOU WIN! 🔥","🔥 5? Perfect! You're due! Law of averages = NEXT IS GREEN! 📈💵"]
 
 def try_delete(chat_id, msg_id):
-    try:
-        bot.delete_message(chat_id, msg_id)
-    except:
-        pass
-
+    try: bot.delete_message(chat_id, msg_id)
+    except: pass
 def clean_old(chat_id, uid):
-    for mid in LAST_BOT_MSG.get(uid, []):
-        try_delete(chat_id, mid)
+    for mid in LAST_BOT_MSG.get(uid, []): try_delete(chat_id, mid)
     LAST_BOT_MSG[uid]=[]
-
 def get_user(uid):
     uid=str(uid)
     if uid not in USERS:
         USERS[uid]={"level":"LOCKED","deposit":0,"daily_w":0,"daily_l":0,"total_w":0,"total_l":0,"streak":0,"loss_streak":0,"used_today":0,"banned":False,"username":"","joined":str(datetime.now()),"pocket_id":""}
-    if uid==OWNER_ID:
-        USERS[uid]["level"]="VIP"
-        USERS[uid]["banned"]=False
+    if uid==OWNER_ID: USERS[uid]["level"]="VIP"; USERS[uid]["banned"]=False
     return USERS[uid]
-
 def is_real_market_open():
     now=datetime.utcnow()
     if now.weekday()==5: return False
@@ -81,81 +60,42 @@ def get_binance_price(pair):
         base={"EUR/USD":1.0840,"GBP/USD":1.2650,"USD/JPY":155.20,"AUD/USD":0.6620,"USD/CAD":1.3610,"USD/CHF":0.9020,"NZD/USD":0.6120,"EUR/JPY":168.30,"EUR/GBP":0.8570,"GBP/JPY":197.10,"AUD/JPY":102.80,"EUR/AUD":1.6350,"EUR/CAD":1.4750,"EUR/CHF":0.9780,"GBP/AUD":1.91,"GBP/CAD":1.7220,"AUD/CAD":0.9010,"AUD/CHF":0.5970,"CHF/JPY":172.10,"CAD/JPY":114.10,"NZD/JPY":95.20,"EUR/NZD":1.7710,"GBP/NZD":2.0660,"USD/NOK":10.52,"USD/SGD":1.3450}
         b=base.get(base_symbol,1.10)
         return round(b+random.uniform(-0.0015,0.0015),5)
-    except:
-        return None
+    except: return None
 
 def get_real_price_twelvedata(pair):
-    base_symbol = pair.replace(" OTC","").strip()
-    clean_noslash = base_symbol.replace("/","")
-    now_ts=time.time()
-    if clean_noslash in PRICE_CACHE and now_ts-PRICE_CACHE[clean_noslash][0]<60:
-        return PRICE_CACHE[clean_noslash][1]
+    base_symbol=pair.replace(" OTC","").strip(); clean_noslash=base_symbol.replace("/",""); now_ts=time.time()
+    if clean_noslash in PRICE_CACHE and now_ts-PRICE_CACHE[clean_noslash][0]<60: return PRICE_CACHE[clean_noslash][1]
     try:
         url=f"https://api.twelvedata.com/price?symbol={base_symbol}&apikey={TWELVE_API}&format=JSON"
         r=requests.get(url, timeout=5).json()
-        if "code" in r and r["code"]==429:
-            fb=get_binance_price(pair)
-            if fb:
-                PRICE_CACHE[clean_noslash]=(now_ts, fb)
-                return fb
         if "price" in r and r["price"]:
-            price=float(r["price"])
-            PRICE_CACHE[clean_noslash]=(now_ts, price)
-            return price
-        if "message" in r and "credits" in str(r.get("message","")).lower():
-            fb=get_binance_price(pair)
-            if fb:
-                PRICE_CACHE[clean_noslash]=(now_ts, fb)
-                return fb
-    except Exception as e:
-        fb=get_binance_price(pair)
-        if fb:
-            PRICE_CACHE[clean_noslash]=(now_ts, fb)
-            return fb
+            price=float(r["price"]); PRICE_CACHE[clean_noslash]=(now_ts,price); return price
+    except: pass
+    fb=get_binance_price(pair)
+    if fb: PRICE_CACHE[clean_noslash]=(now_ts,fb); return fb
     base={"EURUSD":1.08,"GBPUSD":1.26,"USDJPY":155.0,"AUDUSD":0.66,"USDCAD":1.36,"USDCHF":0.90,"NZDUSD":0.61,"EURJPY":168.0,"EURGBP":0.85,"GBPJPY":197.0,"BTCUSD":67000,"ETHUSD":3500}
-    b=base.get(clean_noslash,1.10)
-    fallback=round(b+random.uniform(-0.002,0.002),5)
-    PRICE_CACHE[clean_noslash]=(now_ts, fallback)
-    return fallback
+    b=base.get(clean_noslash,1.10); fallback=round(b+random.uniform(-0.002,0.002),5); PRICE_CACHE[clean_noslash]=(now_ts,fallback); return fallback
 
 def check_3_indicators_logic(rsi, price, ema200, stoch):
     ema_sig="BULLISH 🔼" if price>ema200 else "BEARISH 🔽"
-    if rsi<45 and "BULLISH" in ema_sig and stoch<45:
-        return "BUY 📈","STRONG TRIPLE BUY 🔼🔼🔼","OVERSOLD",ema_sig,"OVERSOLD",85
-    if rsi>55 and "BEARISH" in ema_sig and stoch>55:
-        return "SELL 📉","STRONG TRIPLE SELL 🔽🔽🔽","OVERBOUGHT",ema_sig,"OVERBOUGHT",85
-    bulls=sum([1 for x in [rsi<45, "BULLISH" in ema_sig, stoch<45] if x])
-    bears=sum([1 for x in [rsi>55, "BEARISH" in ema_sig, stoch>55] if x])
-    if bulls>=2:
-        return "BUY 📈",f"Strong Double BUY 🔼🔼 ({bulls}/3)","BULLISH",ema_sig,"BULLISH",78
-    if bears>=2:
-        return "SELL 📉",f"Strong Double SELL 🔽🔽 ({bears}/3)","BEARISH",ema_sig,"BEARISH",78
-    if rsi<50:
-        return "BUY 📈","Single BUY 🔼","NEUTRAL",ema_sig,"NEUTRAL",65
-    else:
-        return "SELL 📉","Single SELL 🔽","NEUTRAL",ema_sig,"NEUTRAL",65
+    if rsi<45 and "BULLISH" in ema_sig and stoch<45: return "BUY 📈","STRONG TRIPLE BUY 🔼🔼🔼","OVERSOLD",ema_sig,"OVERSOLD",85
+    if rsi>55 and "BEARISH" in ema_sig and stoch>55: return "SELL 📉","STRONG TRIPLE SELL 🔽🔽🔽","OVERBOUGHT",ema_sig,"OVERBOUGHT",85
+    bulls=sum([1 for x in [rsi<45, "BULLISH" in ema_sig, stoch<45] if x]); bears=sum([1 for x in [rsi>55, "BEARISH" in ema_sig, stoch>55] if x])
+    if bulls>=2: return "BUY 📈",f"Strong Double BUY 🔼🔼 ({bulls}/3)","BULLISH",ema_sig,"BULLISH",78
+    if bears>=2: return "SELL 📉",f"Strong Double SELL 🔽🔽 ({bears}/3)","BEARISH",ema_sig,"BEARISH",78
+    if rsi<50: return "BUY 📈","Single BUY 🔼","NEUTRAL",ema_sig,"NEUTRAL",65
+    else: return "SELL 📉","Single SELL 🔽","NEUTRAL",ema_sig,"NEUTRAL",65
 
 def gen_signal_manual(pair, expiry="M3"):
-    price=get_real_price_twelvedata(pair)
-    ema200=price+random.uniform(-0.008,0.008)
-    rsi=random.randint(18,82)
-    stoch=random.randint(10,90)
+    price=get_real_price_twelvedata(pair); ema200=price+random.uniform(-0.008,0.008); rsi=random.randint(18,82); stoch=random.randint(10,90)
     direction, strength, rsi_sig, ema_sig, stoch_sig, conf=check_3_indicators_logic(rsi, price, ema200, stoch)
     return pair, direction, strength, rsi, ema_sig, stoch, price, conf, expiry
-
 def gen_signal_auto_strong(market_pairs):
     for _ in range(150):
-        pair=random.choice(market_pairs)
-        price=get_real_price_twelvedata(pair)
-        ema200=price+random.uniform(-0.008,0.008)
-        rsi=random.randint(18,82)
-        stoch=random.randint(10,90)
+        pair=random.choice(market_pairs); price=get_real_price_twelvedata(pair); ema200=price+random.uniform(-0.008,0.008); rsi=random.randint(18,82); stoch=random.randint(10,90)
         direction, strength, rsi_sig, ema_sig, stoch_sig, conf=check_3_indicators_logic(rsi, price, ema200, stoch)
-        if "STRONG TRIPLE" in strength:
-            expiry=random.choice(["M1","M2","M3","M5"])
-            return pair, direction, strength, rsi, ema_sig, stoch, price, conf, expiry
-    pair=random.choice(market_pairs)
-    return gen_signal_manual(pair)
+        if "STRONG TRIPLE" in strength: expiry=random.choice(["M1","M2","M3","M5"]); return pair, direction, strength, rsi, ema_sig, stoch, price, conf, expiry
+    pair=random.choice(market_pairs); return gen_signal_manual(pair)
 
 @app.route("/")
 def home():
@@ -297,7 +237,7 @@ def admin_cmd(m):
             bot.send_message(m.chat.id, f"🔍 {uid_}:\nLevel:{dat.get('level')}\nDeposit:${dat.get('deposit')}\nD:{dat.get('daily_w')}/{dat.get('daily_l')}\nGWR:{dat.get('total_w')}/{dat.get('total_l')} WR:{wr}%\nBanned:{dat.get('banned')}\nUser:@{dat.get('username')}\nPocket:{dat.get('pocket_id','')}")
         except: bot.send_message(m.chat.id, "Usage: /search 123")
 
-        @bot.callback_query_handler(func=lambda c: True)
+@bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     uid=str(c.from_user.id); u=get_user(uid); chat_id=c.message.chat.id
     if u.get("banned") and uid!=OWNER_ID:
@@ -522,6 +462,8 @@ if __name__=="__main__":
     bot.remove_webhook()
     threading.Thread(target=daily_reset_loop, daemon=True).start()
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8080)))).start()
+    print(f"🚀 WW POCKET BOT V14.5 RUNNING with PROMO {PROMO_CODE}")
     while True:
         try: bot.infinity_polling(timeout=60, long_polling_timeout=60)
         except Exception as e: print(f"Polling error {e}, restart in 5s"); time.sleep(5)
+
