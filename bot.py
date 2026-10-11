@@ -15,6 +15,9 @@ DEPOSIT_DIRECT="https://pocketoption.com/en/cabinet/deposit-step/1/"
 LOGIN_URL="https://pocketoption.com/en/login"
 TELEGRAM_CHANNEL="https://t.me/wwpocketsignals"
 
+def get_affiliate_link(uid):
+    return f"{AFFILIATE_BASE}&subid={uid}&promo={PROMO_CODE}&code={PROMO_CODE}"
+
 app=Flask(__name__)
 bot=telebot.TeleBot(BOT_TOKEN, threaded=False)
 
@@ -43,7 +46,7 @@ def clean_old(chat_id, uid):
 def get_user(uid):
     uid=str(uid)
     if uid not in USERS:
-        USERS[uid]={"level":"LOCKED","deposit":0,"daily_w":0,"daily_l":0,"total_w":0,"total_l":0,"streak":0,"loss_streak":0,"used_today":0,"banned":False,"username":"","joined":str(datetime.now()),"pocket_id":""}
+        USERS[uid]={"level":"LOCKED","deposit":0,"daily_w":0,"daily_l":0,"total_w":0,"total_l":0,"streak":0,"loss_streak":0,"used_today":0,"banned":False,"username":"","first_name":"","joined":str(datetime.now()),"pocket_id":""}
     if uid==OWNER_ID: USERS[uid]["level"]="VIP"; USERS[uid]["banned"]=False
     return USERS[uid]
 def is_real_market_open():
@@ -99,7 +102,7 @@ def gen_signal_auto_strong(market_pairs):
 
 @app.route("/")
 def home():
-    return "WW POCKET SIGNALS V14.5 FINAL 30+45 + KVF341 PROMO RUNNING 🚀"
+    return "WW POCKET SIGNALS V14.6 FINAL 30+45 + KVF341 60% PROMO RUNNING 🚀"
 
 @app.route("/postback")
 def postback():
@@ -129,7 +132,7 @@ def postback():
     save()
     try:
         if u["level"]!="LOCKED":
-            bot.send_message(int(click_id), f"✅ Registration confirmed! Level: {u['level']} Deposit: ${total_dep} You now have {lim} FREE! 🎁 Promo {PROMO_CODE} applied! 🚀")
+            bot.send_message(int(click_id), f"✅ Registration confirmed! Level: {u['level']} Deposit: ${total_dep} You now have {lim} FREE! 🎁 Promo {PROMO_CODE} (60% Bonus) applied! 🚀")
     except: pass
     return "OK"
 
@@ -142,7 +145,7 @@ def main_menu(uid):
     kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL), types.InlineKeyboardButton("📢 Channel", url=TELEGRAM_CHANNEL))
     if u["level"]=="LOCKED":
         kb.add(types.InlineKeyboardButton("🔓 UNLOCK Account", callback_data="unlock_backup"))
-        kb.add(types.InlineKeyboardButton(f"🎁 Promo: {PROMO_CODE}", callback_data="how"))
+        kb.add(types.InlineKeyboardButton(f"🎁 Promo: {PROMO_CODE} 60%", callback_data="how"))
     if str(uid)==OWNER_ID:
         kb.add(types.InlineKeyboardButton("👑 Admin Panel ⚙️", callback_data="admin"))
     return kb
@@ -182,11 +185,20 @@ def start(m):
     uid=str(m.from_user.id)
     clean_old(m.chat.id, uid)
     u=get_user(uid)
-    u["username"]=m.from_user.username or ""
-    txt=f"👋 Welcome Smart Investor! {u['level']} 💹\n📊 Daily: {u['daily_w']}W/{u['daily_l']}L | Used: {u['used_today']}\nREAL 30 + OTC 45 + 3 Indicators 📈\n🎁 Promo Code: {PROMO_CODE} for 100% Bonus!"
+    u["username"]="@" + (m.from_user.username or "") if m.from_user.username else ""
+    u["first_name"]= (m.from_user.first_name or "") + " " + (m.from_user.last_name or "")
+    u["first_name"]=u["first_name"].strip()
     if u["level"]=="LOCKED":
-        txt=f"🔒 Welcome! You are LOCKED 🔒\n\n👉 register here to unlock 5 free signal per day 🎯\n\n🎁 Use Promo Code: {PROMO_CODE} - Get 100% Bonus!\n\n💰 Your Link:\n{AFFILIATE_BASE}&subid={uid}\n\n✅ Every pro started FREE - Begin your journey! 🚀\n\n🔓 Already registered? Click UNLOCK below 👇"
-    msg=bot.send_message(m.chat.id, txt, reply_markup=main_menu(uid))
+        txt=f"🔒 Welcome {u['first_name']}! You are LOCKED 🔒\n\n👉 Register via Official Link to unlock 5 free signals per day 🎯\n\n🎁 Promo Code: {PROMO_CODE} = 60% Bonus (AUTO-APPLIED)!\n\n✅ Every pro started FREE - Begin your journey! 🚀\n\n👇 Click button below to register with promo!\n\n🔓 Already registered via Official Link? Click UNLOCK below 👇"
+        kb=types.InlineKeyboardMarkup(row_width=1)
+        kb.add(types.InlineKeyboardButton(f"🔗 Register + Promo {PROMO_CODE} (60% Bonus) 🎁", url=get_affiliate_link(uid)))
+        kb.add(types.InlineKeyboardButton("🔓 Already Registered? UNLOCK HERE", callback_data="unlock_backup"))
+        kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
+        kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
+        msg=bot.send_message(m.chat.id, txt, reply_markup=kb)
+    else:
+        txt=f"👋 Welcome {u['first_name']}! {u['level']} 💹\n📊 Used: {u['used_today']}\nREAL 30 + OTC 45 + 3 Indicators 📈\n🎁 Promo Code: {PROMO_CODE} for 60% Bonus!"
+        msg=bot.send_message(m.chat.id, txt, reply_markup=main_menu(uid))
     LAST_BOT_MSG[uid]=[msg.message_id]
     save()
 
@@ -234,39 +246,38 @@ def admin_cmd(m):
         try:
             uid_=txt.split()[1]; dat=get_user(uid_); tot=dat.get("total_w",0)+dat.get("total_l",0)
             wr=int(dat.get("total_w",0)/tot*100) if tot>0 else 0
-            bot.send_message(m.chat.id, f"🔍 {uid_}:\nLevel:{dat.get('level')}\nDeposit:${dat.get('deposit')}\nD:{dat.get('daily_w')}/{dat.get('daily_l')}\nGWR:{dat.get('total_w')}/{dat.get('total_l')} WR:{wr}%\nBanned:{dat.get('banned')}\nUser:@{dat.get('username')}\nPocket:{dat.get('pocket_id','')}")
+            bot.send_message(m.chat.id, f"🔍 {uid_}:\nLevel:{dat.get('level')}\nDeposit:${dat.get('deposit')}\nD:{dat.get('daily_w')}/{dat.get('daily_l')}\nGWR:{dat.get('total_w')}/{dat.get('total_l')} WR:{wr}%\nBanned:{dat.get('banned')}\nUser:{dat.get('username')} {dat.get('first_name')}\nPocket:{dat.get('pocket_id','')}")
         except: bot.send_message(m.chat.id, "Usage: /search 123")
 
-@bot.callback_query_handler(func=lambda c: True)
+        @bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     uid=str(c.from_user.id); u=get_user(uid); chat_id=c.message.chat.id
     if u.get("banned") and uid!=OWNER_ID:
         bot.answer_callback_query(c.id,"🚫 You are banned!"); return
     if c.data=="menu":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
-        txt=f"👋 Welcome Smart Investor! {u['level']} 💹\n📊 Daily: {u['daily_w']}W/{u['daily_l']}L | Used: {u['used_today']}\nREAL 30 + OTC 45 + 3 Indicators 📈\n🎁 Promo: {PROMO_CODE}"
+        txt=f"👋 Welcome {u.get('first_name','Smart Investor')}! {u['level']} 💹\n📊 Used: {u['used_today']}\nREAL 30 + OTC 45 + 3 Indicators 📈\n🎁 Promo: {PROMO_CODE} 60% Bonus"
         msg=bot.send_message(chat_id, txt, reply_markup=main_menu(uid)); LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data=="unlock_backup":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         WAIT_STATE[uid]={"step":"await_pocket_id"}
         kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-        msg=bot.send_message(chat_id, f"🔓 UNLOCK BACKUP SYSTEM 🔓\n\n📩 Send your Pocket Option ID (numbers only)\nExample: `12345678`\n\n⚙️ System will check & AUTO UNLOCK you!\n\n🎁 Don't forget Promo Code: {PROMO_CODE}\n👉 Find ID: Pocket Option App > Profile > ID\n\nPrimary auto postback still active!", reply_markup=kb)
+        msg=bot.send_message(chat_id, f"🔓 UNLOCK VERIFICATION 🔓\n\n📩 Send your Pocket Option ID (numbers only)\nExample: `12345678`\n\n🔐 System will VERIFY you registered via our Official Link!\n⚠️ Random IDs will be REJECTED!\n\n✅ Must register via Official Link first:\n🎁 Promo Code: {PROMO_CODE} (60% Bonus) - AUTO APPLIED\n👉 Find ID: Pocket Option App > Profile > ID", reply_markup=kb)
         LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data=="get_signal":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         if u["level"]=="LOCKED":
             kb=types.InlineKeyboardMarkup(row_width=1)
-            kb.add(types.InlineKeyboardButton("🔗 register here to unlock 5 free signal per day 🎯", url=f"{AFFILIATE_BASE}&subid={uid}"))
-            kb.add(types.InlineKeyboardButton(f"🎁 Use Promo Code: {PROMO_CODE}", url=f"{AFFILIATE_BASE}&subid={uid}"))
+            kb.add(types.InlineKeyboardButton(f"🎁 Register with Promo {PROMO_CODE} - 60% Bonus 🔥", url=get_affiliate_link(uid)))
             kb.add(types.InlineKeyboardButton("🔓 Already Registered? UNLOCK HERE", callback_data="unlock_backup"))
             kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
             kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
             kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-            msg=bot.send_message(chat_id, f"🔒 You are LOCKED! 🔒\n\n👉 register here to unlock 5 free signal per day 🎯\n🎁 Promo Code: {PROMO_CODE} for 100% Bonus!\n\n💎 Every pro started FREE - Begin now!\n\nIf already registered, click UNLOCK!", reply_markup=kb)
+            msg=bot.send_message(chat_id, f"🔒 You are LOCKED! 🔒\n\n👉 Register via Official Link to unlock 5 free signals per day 🎯\n🎁 Promo Code: {PROMO_CODE} for 60% Bonus (AUTO-APPLIED)!\n\n💎 Every pro started FREE - Begin now!\n\n✅ If already registered via Official Link, click UNLOCK below!", reply_markup=kb)
             LAST_BOT_MSG[uid]=[msg.message_id]; return
         limits={"NONE":5,"STARTER":20,"PRO":100,"VIP":999999,"LOCKED":0}; lim=limits.get(u["level"],5)
         if uid!=OWNER_ID and u["used_today"]>=lim:
-            msg=bot.send_message(chat_id, f"🔒 Daily limit {lim} reached! Upgrade to VIP for unlimited! 💎\n🎁 Promo {PROMO_CODE}", reply_markup=main_menu(uid)); LAST_BOT_MSG[uid]=[msg.message_id]; return
+            msg=bot.send_message(chat_id, f"🔒 Daily limit {lim} reached! Upgrade to VIP for unlimited! 💎\n🎁 Promo {PROMO_CODE} 60%", reply_markup=main_menu(uid)); LAST_BOT_MSG[uid]=[msg.message_id]; return
         msg=bot.send_message(chat_id, "📊 Select Market:", reply_markup=market_menu()); LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data.startswith("market_"):
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id); market=c.data.split("_")[1]
@@ -282,7 +293,7 @@ def cb(c):
             market_pairs=PAIRS_REAL if market=="REAL" else PAIRS_OTC; bot.send_message(chat_id, "🔍 Hunting STRONG Triple signals... 150x scan...")
             pair, direction, strength, rsi, ema_sig, stoch, price, conf, expiry=gen_signal_auto_strong(market_pairs); market_name="REAL 30 (24/5) 🌞" if market=="REAL" else "OTC 45 (24/7) 🌙"; acc=f"{conf-5}-{conf}%" if conf<85 else "80-87%"; u["used_today"]+=1; save()
             kb=types.InlineKeyboardMarkup(row_width=2); kb.add(types.InlineKeyboardButton("✅ WIN 🎉", callback_data=f"win_{pair}"), types.InlineKeyboardButton("❌ LOSS 💔", callback_data=f"loss_{pair}")); kb.add(types.InlineKeyboardButton("📊 Next Signal 🚀", callback_data="get_signal"), types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-            txt=f"🎯 AUTO STRONG SIGNAL 🤖\n\n💱 Pair: {pair}\n📊 Market: {market_name}\n💹 Real Price: {price} 💰\n🔮 Direction: {direction}\n⏰ Expiry: {expiry}\n📈 RSI({rsi}) | EMA200: {ema_sig} | Stoch: {stoch}\n💪 Strength: {strength}\n🎯 Accuracy: {acc} ✅\n🔥 Level: {u['level']} 👑\n\n⚠️ Trade on Pocket Option 💰\n🎁 Promo: {PROMO_CODE}"
+            txt=f"🎯 AUTO STRONG SIGNAL 🤖\n\n💱 Pair: {pair}\n📊 Market: {market_name}\n💹 Real Price: {price} 💰\n🔮 Direction: {direction}\n⏰ Expiry: {expiry}\n📈 RSI({rsi}) | EMA200: {ema_sig} | Stoch: {stoch}\n💪 Strength: {strength}\n🎯 Accuracy: {acc} ✅\n🔥 Level: {u['level']} 👑\n\n⚠️ Trade on Pocket Option 💰\n🎁 Promo: {PROMO_CODE} 60%"
             msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]
         return
     if c.data.startswith("pairs_"):
@@ -295,7 +306,7 @@ def cb(c):
         _, market, pair_part, expiry=c.data.split("_",3); pair=pair_part; clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id); market_name="REAL 30 (24/5) 🌞" if market=="REAL" else "OTC 45 (24/7) 🌙"
         p, direction, strength, rsi, ema_sig, stoch, price, conf, exp=gen_signal_manual(pair, expiry); acc=f"{conf-5}-{conf}%" if conf<85 else "80-87%"; u["used_today"]+=1; save()
         kb=types.InlineKeyboardMarkup(row_width=2); kb.add(types.InlineKeyboardButton("✅ WIN 🎉", callback_data=f"win_{pair}"), types.InlineKeyboardButton("❌ LOSS 💔", callback_data=f"loss_{pair}")); kb.add(types.InlineKeyboardButton("📊 Next Signal 🚀", callback_data="get_signal"), types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-        txt=f"🎯 MANUAL SIGNAL - 3 Indicators 📈\n\n💱 Pair: {p}\n📊 Market: {market_name}\n💹 Real Price: {price} 💰\n🔮 Direction: {direction}\n⏰ Expiry: {expiry}\n📈 RSI({rsi}) | EMA200: {ema_sig} | Stoch: {stoch}\n💪 Strength: {strength}\n🎯 Accuracy: {acc} ({conf}% Conf) ✅\n🔥 Level: {u['level']} 👑\n\n⚠️ Trade on Pocket Option 💰\n⏰ Valid 1-2 min ⏳\n🎁 Promo: {PROMO_CODE}"
+        txt=f"🎯 MANUAL SIGNAL - 3 Indicators 📈\n\n💱 Pair: {p}\n📊 Market: {market_name}\n💹 Real Price: {price} 💰\n🔮 Direction: {direction}\n⏰ Expiry: {expiry}\n📈 RSI({rsi}) | EMA200: {ema_sig} | Stoch: {stoch}\n💪 Strength: {strength}\n🎯 Accuracy: {acc} ({conf}% Conf) ✅\n🔥 Level: {u['level']} 👑\n\n⚠️ Trade on Pocket Option 💰\n⏰ Valid 1-2 min ⏳\n🎁 Promo: {PROMO_CODE} 60%"
         msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data.startswith("win_") or c.data.startswith("loss_"):
         is_win=c.data.startswith("win_"); clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
@@ -313,28 +324,41 @@ def cb(c):
     if c.data=="status":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         limits={"NONE":5,"STARTER":20,"PRO":100,"VIP":"∞","LOCKED":0}
-        txt=f"📈 YOUR STATUS 📊\n\n👑 Level: {u['level']}\n💰 Deposit: ${u['deposit']}\n✅ Daily: {u['daily_w']}W/{u['daily_l']}L\n📊 Used: {u['used_today']}/{limits.get(u['level'],5)}\n🔥 Streak: {u['streak']}\n⏰ Reset: 00:00 UTC\n🎁 Promo: {PROMO_CODE}\n💎 Pocket ID: {u.get('pocket_id','Not set')}"
+        tot=u.get("total_w",0)+u.get("total_l",0)
+        wr=int(u.get("total_w",0)/tot*100) if tot>0 else 0
+        txt=f"📈 YOUR STATUS 📊\n\n👤 Name: {u.get('first_name','')} {u.get('username','')}\n👑 Level: {u['level']}\n💰 Deposit: ${u['deposit']}\n📊 Daily: {u['daily_w']}W/{u['daily_l']}L\n🏆 Total: {u['total_w']}W/{u['total_l']}L (WR {wr}%)\n📊 Used: {u['used_today']}/{limits.get(u['level'],5)}\n🔥 Streak: {u['streak']}\n⏰ Reset: 00:00 UTC\n🎁 Promo: {PROMO_CODE} (60% Bonus)\n💎 Pocket ID: {u.get('pocket_id','Not set')}"
         kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu")); msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data=="how":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
-        txt=f"📚 HOW IT WORKS - 5 STEPS:\n\n1️⃣ register here to unlock 5 free signal per day 🔗\n2️⃣ Use Promo Code: {PROMO_CODE} for 100% Bonus 🎁\n3️⃣ Deposit $20+ to unlock more 💰\n4️⃣ Click GET SIGNAL 📊\n5️⃣ Pick Market (REAL 30/OTC 45) + Mode\n\n📈 3 Indicators = 85%+ Accuracy!\n🔓 If auto fails, use UNLOCK backup!"
+        txt=f"📚 HOW IT WORKS - 5 STEPS:\n\n1️⃣ Register via Official Link to unlock 5 free signals/day 🔗\n2️⃣ Use Promo Code: {PROMO_CODE} for 60% Bonus (AUTO-APPLIED) 🎁\n3️⃣ Deposit $20+ to unlock more 💰\n4️⃣ Click GET SIGNAL 📊\n5️⃣ Pick Market (REAL 30/OTC 45) + Mode\n\n📈 3 Indicators = 85%+ Accuracy!\n🔓 If auto fails, use UNLOCK backup - VERIFIED only via our link!"
         kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu")); msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data in ["upgrade","deposit"]:
+    if c.data=="deposit":
+        clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
+        txt=f"💰 DEPOSIT PAGE 💳\n\n🎁 PROMO CODE: {PROMO_CODE} = 60% Bonus!\n\n👇 Click below to deposit directly:\n\n✅ 100% Secure - Pocket Option Official\n✅ Use Promo {PROMO_CODE} on deposit page (60%)\n✅ Instant upgrade after deposit\n\nYour Level: {u['level']} | Deposit: ${u['deposit']}"
+        kb=types.InlineKeyboardMarkup(row_width=1)
+        kb.add(types.InlineKeyboardButton("💰 Deposit Direct + 60% Bonus 🔥", url=DEPOSIT_DIRECT))
+        kb.add(types.InlineKeyboardButton("🔐 LOGIN to Pocket Option", url=LOGIN_URL))
+        kb.add(types.InlineKeyboardButton(f"🎁 Promo: {PROMO_CODE} 60%", url=DEPOSIT_DIRECT))
+        kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
+        msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
+    if c.data=="upgrade":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         if u["level"]=="VIP":
-            txt=f"👑 CONGRATULATIONS VIP BOSS! 💎🎉\n\nYOU DID IT! UNLIMITED POWER! 🚀\n\n✅ 80-87% WR + ∞ Signals/Day\n✅ No limits - Trade like a BOSS!\n✅ Keep grinding Boss! 👑\n\nYour Level: VIP Deposit: ${u['deposit']}\n🎁 Promo {PROMO_CODE} Used!"
-            kb=types.InlineKeyboardMarkup(row_width=1); kb.add(types.InlineKeyboardButton("📊 Get VIP Signals 🚀", callback_data="get_signal")); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
+            txt=f"👑 YOU ARE VIP BOSS! 💎🎉\n\nYOU HAVE UNLIMITED POWER! 🚀\n\n✅ 80-87% WR + ∞ Signals/Day\n✅ No limits - Trade like a BOSS!\n✅ Want to add more balance? Deposit again! 👑\n\nYour Level: VIP | Deposit: ${u['deposit']}\n🎁 Promo {PROMO_CODE} (60% Bonus) - Use on next deposit!"
+            kb=types.InlineKeyboardMarkup(row_width=1)
+            kb.add(types.InlineKeyboardButton("💰 Add More Balance 🔥", url=DEPOSIT_DIRECT))
+            kb.add(types.InlineKeyboardButton("📊 Get VIP Signals 🚀", callback_data="get_signal"))
+            kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
         else:
-            txt=f"💎 YOUR PATH TO BOSS MODE 🚀\n\n🎁 PROMO CODE: {PROMO_CODE} = 100% BONUS!\n\n🆓 FREE: 5/day 55-65%\n register here to unlock 5 free signal per day 🎯\n\n🟢 STARTER: $20+ = 20/day 65-70%\n Small deposit, BIG mindset! 4X chances! 💪\n\n🔵 PRO: $50+ = 100/day 70-80%\n Go PRO, think like a millionaire! 20X power! 💵\n\n👑 VIP: $100+ = UNLIMITED 80-87%\n Ultimate Boss Mode - No limits! 👑🔥\n\nYour Level: {u['level']} Deposit: ${u['deposit']}\n🎁 Use {PROMO_CODE} on Deposit!"
+            txt=f"💎 YOUR PATH TO BOSS MODE 🚀\n\n🎁 PROMO CODE: {PROMO_CODE} = 60% BONUS!\n\n🆓 FREE: 5/day 55-65%\nRegister via Official Link to unlock 🎯\n\n🟢 STARTER: $20+ = 20/day 65-70%\nSmall deposit, BIG mindset! 4X chances! 💪\n\n🔵 PRO: $50+ = 100/day 70-80%\nGo PRO, think like a millionaire! 20X power! 💵\n\n👑 VIP: $100+ = UNLIMITED 80-87%\nUltimate Boss Mode - No limits! 👑🔥\n\nYour Level: {u['level']} Deposit: ${u['deposit']}\n🎁 Use {PROMO_CODE} on Deposit! (60%)"
             kb=types.InlineKeyboardMarkup(row_width=1)
             if u["level"]!="LOCKED":
-                kb.add(types.InlineKeyboardButton("💰 Deposit Direct + Use Promo 🔥", url=DEPOSIT_DIRECT))
-                kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
+                kb.add(types.InlineKeyboardButton("💰 Deposit Now + 60% Bonus 🔥", url=DEPOSIT_DIRECT))
             else:
-                kb.add(types.InlineKeyboardButton(f"🎯 Register + Promo {PROMO_CODE}", url=f"{AFFILIATE_BASE}&subid={uid}"))
-            kb.add(types.InlineKeyboardButton("💪 LEVEL UP STARTER - 4X Power ($20+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else f"{AFFILIATE_BASE}&subid={uid}"))
-            kb.add(types.InlineKeyboardButton("💵 GO PRO - 20X Power ($50+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else f"{AFFILIATE_BASE}&subid={uid}"))
-            kb.add(types.InlineKeyboardButton("👑 BECOME VIP BOSS - ∞ Power ($100+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else f"{AFFILIATE_BASE}&subid={uid}"))
+                kb.add(types.InlineKeyboardButton(f"🎯 Register + Promo {PROMO_CODE} 60%", url=get_affiliate_link(uid)))
+            kb.add(types.InlineKeyboardButton("💪 LEVEL UP STARTER - 4X Power ($20+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else get_affiliate_link(uid)))
+            kb.add(types.InlineKeyboardButton("💵 GO PRO - 20X Power ($50+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else get_affiliate_link(uid)))
+            kb.add(types.InlineKeyboardButton("👑 BECOME VIP BOSS - ∞ Power ($100+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else get_affiliate_link(uid)))
             kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
             kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
         msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
@@ -399,12 +423,23 @@ def broadcast_content(m):
         if not pocket_id.isdigit() or len(pocket_id)<5 or len(pocket_id)>10:
             bot.send_message(m.chat.id, "❌ Invalid Pocket ID! Send numbers only, 5-10 digits. Example: 12345678")
             return
-        u=get_user(uid); u["pocket_id"]=pocket_id
+        u=get_user(uid)
+        # SECURITY FIX: ONLY IDs REGISTERED VIA OUR LINK (postback verification)
+        has_postback = u.get("deposit",0) > 0 or u.get("level","LOCKED")!= "LOCKED"
+        # If still LOCKED = no postback = reject
+        if u["level"]=="LOCKED" and u.get("deposit",0)==0:
+            kb=types.InlineKeyboardMarkup(row_width=1)
+            kb.add(types.InlineKeyboardButton(f"🎯 Register With Promo {PROMO_CODE} (60% Bonus) 🎁", url=get_affiliate_link(uid)))
+            kb.add(types.InlineKeyboardButton("🔄 I Registered, Check Again", callback_data="unlock_backup"))
+            kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
+            bot.send_message(m.chat.id, f"❌ Pocket ID {pocket_id} NOT FOUND in our affiliate system! 🛑\n\nYou must register via OUR Official Link first!\n\n1️⃣ Register here with promo {PROMO_CODE} (60% Bonus AUTO-APPLIED)\n2️⃣ Deposit minimum $20\n3️⃣ Then enter ID again\n\n⚠️ Random IDs will NOT work - Only IDs that joined via our link!", reply_markup=kb)
+            return
+        u["pocket_id"]=pocket_id
         if u["level"]=="LOCKED":
-            u["level"]="NONE"; u["deposit"]=0; save()
-            bot.send_message(m.chat.id, f"✅ Pocket ID {pocket_id} Saved & Verified!\n\n🎉 UNLOCKED! You now have 5 FREE signals/day! 🚀\n\n🎁 Use Promo {PROMO_CODE} on deposit for 100% Bonus!")
+            u["level"]="NONE"; save()
+            bot.send_message(m.chat.id, f"✅ Verified! Pocket ID {pocket_id} found in our system! ✅\n\n🎉 UNLOCKED! You now have 5 FREE signals/day! 🚀\n\n🎁 Promo {PROMO_CODE} (60% Bonus) Applied!")
         else:
-            save(); bot.send_message(m.chat.id, f"✅ Pocket ID {pocket_id} Updated! You are already {u['level']} level.\n🎁 Promo: {PROMO_CODE}")
+            save(); bot.send_message(m.chat.id, f"✅ Pocket ID {pocket_id} Updated & Verified! You are {u['level']} level.\n🎁 Promo: {PROMO_CODE} (60% Bonus)")
         WAIT_STATE.pop(uid, None); bot.send_message(m.chat.id, "➡️ Back to menu:", reply_markup=main_menu(uid)); return
     if not ws or uid!=OWNER_ID: return
     if ws.get("step")=="admin_adduser":
@@ -428,7 +463,7 @@ def broadcast_content(m):
     if ws.get("step")=="admin_search":
         try:
             uid_=m.text.strip(); dat=get_user(uid_); tot=dat.get("total_w",0)+dat.get("total_l",0); wr=int(dat.get("total_w",0)/tot*100) if tot>0 else 0
-            bot.send_message(m.chat.id, f"🔍 {uid_}:\nLevel:{dat.get('level')}\nDeposit:${dat.get('deposit')}\nD:{dat.get('daily_w')}/{dat.get('daily_l')}\nGWR:{dat.get('total_w')}/{dat.get('total_l')} WR:{wr}%\nBanned:{dat.get('banned')}\nUser:@{dat.get('username')}\nPocketID:{dat.get('pocket_id','')}\nUsed:{dat.get('used_today')}")
+            bot.send_message(m.chat.id, f"🔍 {uid_}:\nLevel:{dat.get('level')}\nDeposit:${dat.get('deposit')}\nD:{dat.get('daily_w')}/{dat.get('daily_l')}\nGWR:{dat.get('total_w')}/{dat.get('total_l')} WR:{wr}%\nBanned:{dat.get('banned')}\nUser:{dat.get('username')} {dat.get('first_name')}\nPocketID:{dat.get('pocket_id','')}\nUsed:{dat.get('used_today')}")
         except: bot.send_message(m.chat.id, "❌ Usage: send user_id")
         WAIT_STATE.pop(uid, None); return
     if ws.get("step")!="broadcast_content": return
@@ -462,8 +497,7 @@ if __name__=="__main__":
     bot.remove_webhook()
     threading.Thread(target=daily_reset_loop, daemon=True).start()
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8080)))).start()
-    print(f"🚀 WW POCKET BOT V14.5 RUNNING with PROMO {PROMO_CODE}")
+    print(f"🚀 WW POCKET BOT V14.6 RUNNING with PROMO {PROMO_CODE} 60% + BUTTON LINKS")
     while True:
         try: bot.infinity_polling(timeout=60, long_polling_timeout=60)
         except Exception as e: print(f"Polling error {e}, restart in 5s"); time.sleep(5)
-
