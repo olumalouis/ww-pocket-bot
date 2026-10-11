@@ -9,7 +9,7 @@ OWNER_ID="8188622130"
 DATA_FILE="db.json"
 TRADERS_FILE="traders.json"
 TWELVE_API=os.environ.get("TWELVE_API","7fdda54e0e074a74b9ee0098ca2388c8")
-STRICT_MODE=os.environ.get("STRICT_MODE","true").lower()=="true" # true = block random IDs like 12345678
+STRICT_MODE=os.environ.get("STRICT_MODE","true").lower()=="true"
 
 AFFILIATE_BASE="https://u3.shortink.io/register?utm_campaign=868502&utm_source=affiliate&utm_medium=sr&a=jnLBWcb8IEyL7T&al=1801402&ac=wwpocket100&cid=984351"
 PROMO_CODE="KVF341"
@@ -114,59 +114,41 @@ def gen_signal_auto_strong(market_pairs):
 
 @app.route("/")
 def home():
-    return f"WW POCKET SIGNALS V14.7 FIXED 30+45 + {PROMO_CODE} 60% PROMO RUNNING 🚀"
+    return f"WW POCKET SIGNALS V15 ANTI-FAKE + GLOBAL WR + {PROMO_CODE} 60% PROMO RUNNING 🚀"
 
 @app.route("/postback")
 def postback():
-    # FIXED: Accept all param names from Pocket Partners
     PASSWORD="WW12345"
     secret=request.args.get("secret") or request.args.get("pass") or request.args.get("password") or ""
     click_id=request.args.get("click_id") or request.args.get("PocketPartnersClickID") or request.args.get("subid") or ""
     trader_id=request.args.get("trader_id") or request.args.get("TraderID") or ""
     sumdep=request.args.get("sumdep") or request.args.get("SumDeposits") or request.args.get("deposit") or "0"
     event=request.args.get("event") or ""
-
-    # Secret check - allow OWNER or correct password
     if secret!=PASSWORD and str(click_id)!=OWNER_ID and secret!="":
-        # Still allow if no secret but has click_id (for backward compat)
         if secret and secret!=PASSWORD:
             return "Unauthorized",401
-
     if not click_id:
         return "NO CLICK ID - Need {PocketPartnersClickID}",400
-
     try: dep=float(sumdep or 0)
     except: dep=0.0
-
-    # Save trader_id -> click_id mapping for unlock button verification
     if trader_id:
         TRADERS[str(trader_id)]=str(click_id)
         save_traders()
-
     u=get_user(click_id)
     old_dep=float(u.get("deposit",0) or 0)
-
-    # REGISTRATION event: auto unlock to NONE
     if event=="reg" or (dep==0 and old_dep==0):
         if u.get("level","LOCKED")=="LOCKED":
             u["level"]="NONE"
         if trader_id:
             u["pocket_id"]=str(trader_id)
-        # Save if not saved
         if old_dep==0:
             u["deposit"]=0
-
-    # DEPOSIT events: FTD and RE-DEPOSIT
     if dep>0:
-        # If first deposit, set deposit = dep, else add?
-        # Pocket sends total SumDeposits, so use max
         total_dep=max(old_dep, dep)
-        # If it's incremental deposit, add logic
         if old_dep>0 and dep>old_dep:
             total_dep=dep
         elif old_dep>0 and dep<old_dep and dep>0:
             total_dep=old_dep+dep
-
         u["deposit"]=total_dep
         if total_dep>=100: u["level"]="VIP"
         elif total_dep>=50: u["level"]="PRO"
@@ -174,10 +156,7 @@ def postback():
         elif total_dep>0: u["level"]="NONE"
         if trader_id:
             u["pocket_id"]=str(trader_id)
-
     save()
-
-    # Notify user
     try:
         if event=="reg" or (dep==0 and u["level"]!="LOCKED"):
             bot.send_message(int(click_id), f"✅ Registration Confirmed! 🎉\n🆔 Pocket ID: {trader_id}\n🚀 Bot UNLOCKED! 5 FREE signals/day!\n🎁 Promo {PROMO_CODE} 60% active!\n💰 Deposit $20 to get STARTER!")
@@ -185,7 +164,6 @@ def postback():
             lim="UNLIMITED" if u["level"]=="VIP" else "100/day" if u["level"]=="PRO" else "20/day" if u["level"]=="STARTER" else "5/day"
             bot.send_message(int(click_id), f"💰 Deposit Detected! ${u['deposit']} ✅\n🎉 Upgraded to {u['level']}! Limit: {lim} 🚀\n🆔 ID: {trader_id}")
     except: pass
-
     return f"OK click_id={click_id} trader_id={trader_id} dep={u.get('deposit')} level={u.get('level')}",200
 
 def main_menu(uid):
@@ -195,9 +173,7 @@ def main_menu(uid):
     kb.add(types.InlineKeyboardButton("💎 Upgrade 💰", callback_data="upgrade"), types.InlineKeyboardButton("💰 Deposit 🔥", callback_data="deposit"))
     kb.add(types.InlineKeyboardButton("📈 My Status 📊", callback_data="status"), types.InlineKeyboardButton("📚 How it Works 📖", callback_data="how"))
     kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL), types.InlineKeyboardButton("📢 Channel", url=TELEGRAM_CHANNEL))
-    if u["level"]=="LOCKED":
-        kb.add(types.InlineKeyboardButton("🔓 UNLOCK Account", callback_data="unlock_backup"))
-        kb.add(types.InlineKeyboardButton(f"🎁 Promo: {PROMO_CODE} 60%", callback_data="how"))
+    # REMOVED UNLOCK BUTTON - ANTI FAKE
     if str(uid)==OWNER_ID:
         kb.add(types.InlineKeyboardButton("👑 Admin Panel ⚙️", callback_data="admin"))
     return kb
@@ -241,10 +217,9 @@ def start(m):
     u["first_name"]= (m.from_user.first_name or "") + " " + (m.from_user.last_name or "")
     u["first_name"]=u["first_name"].strip()
     if u["level"]=="LOCKED":
-        txt=f"🔒 Welcome {u['first_name']}! You are LOCKED 🔒\n\n👉 Register via Official Link to unlock 5 free signals per day 🎯\n\n🎁 Promo Code: {PROMO_CODE} = 60% Bonus (AUTO-APPLIED)!\n\n✅ Every pro started FREE - Begin your journey! 🚀\n\n👇 Click button below to register with promo!\n\n🔓 Already registered via Official Link? Click UNLOCK below 👇"
+        txt=f"🔒 Welcome {u['first_name']}! You are LOCKED 🔒\n\n👉 Register via Official Link to unlock 5 free signals per day 🎯\n\n🎁 Promo Code: {PROMO_CODE} = 60% Bonus (AUTO-APPLIED)!\n\n✅ Every pro started FREE - Begin your journey! 🚀\n\n👇 Click button below to register with promo!"
         kb=types.InlineKeyboardMarkup(row_width=1)
         kb.add(types.InlineKeyboardButton(f"🔗 Register + Promo {PROMO_CODE} (60% Bonus) 🎁", url=get_affiliate_link(uid)))
-        kb.add(types.InlineKeyboardButton("🔓 Already Registered? UNLOCK HERE", callback_data="unlock_backup"))
         kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
         kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
         msg=bot.send_message(m.chat.id, txt, reply_markup=kb)
@@ -274,7 +249,8 @@ def admin_cmd(m):
             if lvl in counts: counts[lvl]+=1
             if dat.get("banned"): counts["BANNED"]+=1
             tw+=dat.get("total_w",0); tl+=dat.get("total_l",0)
-        bot.send_message(m.chat.id, f"📊 STATS:\nLOCKED:{counts['LOCKED']} NONE:{counts['NONE']} STARTER:{counts['STARTER']} PRO:{counts['PRO']} VIP:{counts['VIP']}\nBANNED:{counts['BANNED']}\nGWR Total: {tw}W/{tl}L\nTraders verified: {len(TRADERS)}")
+        gwr=int(tw/(tw+tl)*100) if (tw+tl)>0 else 0
+        bot.send_message(m.chat.id, f"📊 STATS:\nLOCKED:{counts['LOCKED']} NONE:{counts['NONE']} STARTER:{counts['STARTER']} PRO:{counts['PRO']} VIP:{counts['VIP']}\nBANNED:{counts['BANNED']}\n🌍 Global WR: {tw}W/{tl}L (WR {gwr}%)\nTraders verified: {len(TRADERS)}")
     elif txt.startswith("/ban"):
         try:
             uid_=txt.split()[1]; get_user(uid_)["banned"]=True; save()
@@ -301,7 +277,7 @@ def admin_cmd(m):
             bot.send_message(m.chat.id, f"🔍 {uid_}:\nLevel:{dat.get('level')}\nDeposit:${dat.get('deposit')}\nD:{dat.get('daily_w')}/{dat.get('daily_l')}\nGWR:{dat.get('total_w',0)}/{dat.get('total_l',0)} WR:{wr}%\nBanned:{dat.get('banned')}\nUser:{dat.get('username')} {dat.get('first_name')}\nPocket:{dat.get('pocket_id','')}")
         except: bot.send_message(m.chat.id, "Usage: /search 123")
 
-@bot.callback_query_handler(func=lambda c: True)
+        @bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     uid=str(c.from_user.id); u=get_user(uid); chat_id=c.message.chat.id
     if u.get("banned") and uid!=OWNER_ID:
@@ -310,22 +286,15 @@ def cb(c):
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         txt=f"👋 Welcome {u.get('first_name','Smart Investor')}! {u['level']} 💹\n📊 Used: {u['used_today']}\nREAL 30 + OTC 45 + 3 Indicators 📈\n🎁 Promo: {PROMO_CODE} 60% Bonus"
         msg=bot.send_message(chat_id, txt, reply_markup=main_menu(uid)); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data=="unlock_backup":
-        clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
-        WAIT_STATE[uid]={"step":"await_pocket_id"}
-        kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-        msg=bot.send_message(chat_id, f"🔓 UNLOCK VERIFICATION 🔓\n\n📩 Send your Pocket Option ID (numbers only)\nExample: `12345678`\n\n🔐 System will VERIFY you registered via our Official Link!\n⚠️ Random IDs like 12345678 will be REJECTED if not under our link!\n\n✅ Must register via Official Link first:\n🎁 Promo Code: {PROMO_CODE} (60% Bonus) - AUTO APPLIED\n👉 Find ID: Pocket Option App > Profile > ID\n\n💡 NEW USERS: Just register via link -> Auto unlock! No need to type ID!", reply_markup=kb)
-        LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data=="get_signal":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         if u["level"]=="LOCKED":
             kb=types.InlineKeyboardMarkup(row_width=1)
             kb.add(types.InlineKeyboardButton(f"🎁 Register with Promo {PROMO_CODE} - 60% Bonus 🔥", url=get_affiliate_link(uid)))
-            kb.add(types.InlineKeyboardButton("🔓 Already Registered? UNLOCK HERE", callback_data="unlock_backup"))
             kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
             kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
             kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-            msg=bot.send_message(chat_id, f"🔒 You are LOCKED! 🔒\n\n👉 Register via Official Link to unlock 5 free signals per day 🎯\n🎁 Promo Code: {PROMO_CODE} for 60% Bonus (AUTO-APPLIED)!\n\n💎 Every pro started FREE - Begin now!\n\n✅ If already registered via Official Link, click UNLOCK below!", reply_markup=kb)
+            msg=bot.send_message(chat_id, f"🔒 You are LOCKED! 🔒\n\n👉 Register via Official Link to unlock 5 free signals per day 🎯\n🎁 Promo Code: {PROMO_CODE} for 60% Bonus (AUTO-APPLIED)!\n\n💎 Every pro started FREE - Begin now!", reply_markup=kb)
             LAST_BOT_MSG[uid]=[msg.message_id]; return
         limits={"NONE":5,"STARTER":20,"PRO":100,"VIP":999999,"LOCKED":0}; lim=limits.get(u["level"],5)
         if uid!=OWNER_ID and u["used_today"]>=lim:
@@ -376,13 +345,11 @@ def cb(c):
     if c.data=="status":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         limits={"NONE":5,"STARTER":20,"PRO":100,"VIP":"∞","LOCKED":0}
-        tot=u.get("total_w",0)+u.get("total_l",0)
-        wr=int(u.get("total_w",0)/tot*100) if tot>0 else 0
-        txt=f"📈 YOUR STATUS 📊\n\n👤 Name: {u.get('first_name','')} {u.get('username','')}\n👑 Level: {u['level']}\n💰 Deposit: ${u['deposit']}\n📊 Daily: {u['daily_w']}W/{u['daily_l']}L\n🏆 Total: {u['total_w']}W/{u['total_l']}L (WR {wr}%)\n📊 Used: {u['used_today']}/{limits.get(u['level'],5)}\n🔥 Streak: {u['streak']}\n⏰ Reset: 00:00 UTC\n🎁 Promo: {PROMO_CODE} (60% Bonus)\n💎 Pocket ID: {u.get('pocket_id','Not set')}"
+        txt=f"📈 YOUR STATUS 📊\n\n👤 Name: {u.get('first_name','')} {u.get('username','')}\n👑 Level: {u['level']}\n💰 Deposit: ${u['deposit']}\n📊 Daily: {u['daily_w']}W/{u['daily_l']}L\n📊 Used: {u['used_today']}/{limits.get(u['level'],5)}\n🔥 Streak: {u['streak']}\n⏰ Reset: 00:00 UTC\n🎁 Promo: {PROMO_CODE} (60% Bonus)\n💎 Pocket ID: {u.get('pocket_id','Not set')}"
         kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu")); msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data=="how":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
-        txt=f"📚 HOW IT WORKS - 5 STEPS:\n\n1️⃣ Register via Official Link to unlock 5 free signals/day 🔗\n2️⃣ Use Promo Code: {PROMO_CODE} for 60% Bonus (AUTO-APPLIED) 🎁\n3️⃣ Deposit $20+ to unlock more 💰\n4️⃣ Click GET SIGNAL 📊\n5️⃣ Pick Market (REAL 30/OTC 45) + Mode\n\n📈 3 Indicators = 85%+ Accuracy!\n🔓 If auto fails, use UNLOCK backup - VERIFIED only via our link!"
+        txt=f"📚 HOW IT WORKS - 5 STEPS:\n\n1️⃣ Register via Official Link to unlock 5 free signals/day 🔗\n2️⃣ Use Promo Code: {PROMO_CODE} for 60% Bonus (AUTO-APPLIED) 🎁\n3️⃣ Deposit $20+ to unlock more 💰\n4️⃣ Click GET SIGNAL 📊\n5️⃣ Pick Market (REAL 30/OTC 45) + Mode\n\n📈 3 Indicators = 85%+ Accuracy!\n🔓 Auto unlock via our link - No manual ID needed!"
         kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu")); msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data=="deposit":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
@@ -444,11 +411,14 @@ def cb(c):
             bot.send_message(chat_id, out)
         elif c.data=="admin_stats":
             counts={"LOCKED":0,"NONE":0,"STARTER":0,"PRO":0,"VIP":0,"BANNED":0}
+            tw=0; tl=0
             for dat in USERS.values():
                 lvl=dat.get("level","LOCKED")
                 if lvl in counts: counts[lvl]+=1
                 if dat.get("banned"): counts["BANNED"]+=1
-            bot.send_message(chat_id, f"📊 {counts} Traders:{len(TRADERS)}")
+                tw+=dat.get("total_w",0); tl+=dat.get("total_l",0)
+            gwr=int(tw/(tw+tl)*100) if (tw+tl)>0 else 0
+            bot.send_message(chat_id, f"📊 STATS:\n{counts}\n🌍 Global WR: {tw}W/{tl}L (WR {gwr}%)\nTraders:{len(TRADERS)}")
         elif c.data=="admin_reset":
             for dat in USERS.values(): dat["used_today"]=0; dat["daily_w"]=0; dat["daily_l"]=0; dat["streak"]=0; dat["loss_streak"]=0
             save(); bot.send_message(chat_id, "🔄 Daily Reset Done!")
@@ -466,38 +436,6 @@ def cb(c):
         elif c.data=="admin_search":
             WAIT_STATE[uid]={"step":"admin_search"}; bot.send_message(chat_id, "🔍 Search:\nSend user_id e.g. `123456`")
         bot.answer_callback_query(c.id); return
-
-@bot.message_handler(func=lambda m: WAIT_STATE.get(str(m.from_user.id), {}).get("step")=="await_pocket_id")
-def handle_pocket_id(m):
-    uid=str(m.from_user.id); pocket_id=m.text.strip()
-    if not pocket_id.isdigit() or len(pocket_id)<5 or len(pocket_id)>10:
-        bot.send_message(m.chat.id, "❌ Invalid Pocket ID! Send numbers only, 5-10 digits. Example: 12345678")
-        return
-    u=get_user(uid)
-
-    # NEW: Verify if this pocket_id came from YOUR affiliate link (postback)
-    # TRADERS dict = {trader_id: telegram_id} populated by postback
-    if STRICT_MODE and len(TRADERS)>0:
-        if pocket_id not in TRADERS:
-            # ID never came via our link -> BLOCK random IDs like 12345678
-            kb=types.InlineKeyboardMarkup(row_width=1)
-            kb.add(types.InlineKeyboardButton(f"🎯 Register With Promo {PROMO_CODE} (60% Bonus) 🎁", url=get_affiliate_link(uid)))
-            kb.add(types.InlineKeyboardButton("🔄 I Registered, Check Again", callback_data="unlock_backup"))
-            kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-            bot.send_message(m.chat.id, f"❌ Pocket ID {pocket_id} NOT FOUND in our affiliate system! 🛑\n\nYou must register via OUR Official Link first!\n\n1️⃣ Register here with promo {PROMO_CODE} (60% Bonus AUTO-APPLIED)\n2️⃣ Deposit minimum $20\n3️⃣ Then enter ID again OR wait for auto-unlock\n\n⚠️ Random IDs will NOT work - Only IDs that joined via our link!\n\n💡 If you just registered, wait 2 mins and postback will auto-unlock you!", reply_markup=kb)
-            return
-        # Optional: ensure same telegram user
-        # if TRADERS.get(pocket_id)!=uid: # allow if affiliate team shares?
-        # pass
-
-    # If TRADERS empty (before new postback URLs active), allow once but save
-    u["pocket_id"]=pocket_id
-    if u["level"]=="LOCKED":
-        u["level"]="NONE"; save()
-        bot.send_message(m.chat.id, f"✅ Verified! Pocket ID {pocket_id} Saved! ✅\n\n🎉 UNLOCKED! You now have 5 FREE signals/day! 🚀\n\n🎁 Promo {PROMO_CODE} (60% Bonus) Applied!\n\n💡 Deposits will auto-upgrade via postback!")
-    else:
-        save(); bot.send_message(m.chat.id, f"✅ Pocket ID {pocket_id} Updated & Verified! You are {u['level']} level.\n🎁 Promo: {PROMO_CODE} (60% Bonus)")
-    WAIT_STATE.pop(uid, None); bot.send_message(m.chat.id, "➡️ Back to menu:", reply_markup=main_menu(uid))
 
 @bot.message_handler(content_types=['text','photo','video','document'])
 def broadcast_content(m):
@@ -524,7 +462,7 @@ def broadcast_content(m):
     if ws.get("step")=="admin_search":
         try:
             uid_=m.text.strip(); dat=get_user(uid_); tot=dat.get("total_w",0)+dat.get("total_l",0); wr=int(dat.get("total_w",0)/tot*100) if tot>0 else 0
-            bot.send_message(m.chat.id, f"🔍 {uid_}:\nLevel:{dat.get('level')}\nDeposit:${dat.get('deposit')}\nD:{dat.get('daily_w')}/{dat.get('daily_l')}\nGWR:{dat.get('total_w')}/{dat.get('total_l')} WR:{wr}%\nBanned:{dat.get('banned')}\nUser:{dat.get('username')} {dat.get('first_name')}\nPocketID:{dat.get('pocket_id','')}\nUsed:{dat.get('used_today')}")
+            bot.send_message(m.chat.id, f"🔍 {uid_}:\nLevel:{dat.get('level')}\nDeposit:${dat.get('deposit')}\nD:{dat.get('daily_w')}/{dat.get('daily_l')}\n🌍 GWR:{dat.get('total_w')}/{dat.get('total_l')} WR:{wr}%\nBanned:{dat.get('banned')}\nUser:{dat.get('username')} {dat.get('first_name')}\nPocketID:{dat.get('pocket_id','')}\nUsed:{dat.get('used_today')}")
         except: bot.send_message(m.chat.id, "❌ Usage: send user_id")
         WAIT_STATE.pop(uid, None); return
     if ws.get("step")!="broadcast_content": return
@@ -568,11 +506,10 @@ if __name__=="__main__":
         pass
     threading.Thread(target=daily_reset_loop, daemon=True).start()
     threading.Thread(target=run_flask, daemon=True).start()
-    print(f"🚀 WW POCKET BOT V14.7 FIXED RUNNING with PROMO {PROMO_CODE} 60% + BUTTON LINKS + STRICT VERIFY 🔥")
+    print(f"🚀 WW POCKET BOT V15 ANTI-FAKE + GLOBAL WR RUNNING with PROMO {PROMO_CODE} 60% 🔥")
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
         except Exception as e:
             print(f"⚠️ Polling error {e}, restart in 5s ⏳")
             time.sleep(5)
-        
