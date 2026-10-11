@@ -102,7 +102,7 @@ def gen_signal_auto_strong(market_pairs):
 
 @app.route("/")
 def home():
-    return "WW POCKET SIGNALS V14.6 FINAL 30+45 + KVF341 60% PROMO RUNNING 🚀"
+    return f"WW POCKET SIGNALS V14.7 FIXED 30+45 + {PROMO_CODE} 60% PROMO RUNNING 🚀"
 
 @app.route("/postback")
 def postback():
@@ -246,7 +246,7 @@ def admin_cmd(m):
         try:
             uid_=txt.split()[1]; dat=get_user(uid_); tot=dat.get("total_w",0)+dat.get("total_l",0)
             wr=int(dat.get("total_w",0)/tot*100) if tot>0 else 0
-            bot.send_message(m.chat.id, f"🔍 {uid_}:\nLevel:{dat.get('level')}\nDeposit:${dat.get('deposit')}\nD:{dat.get('daily_w')}/{dat.get('daily_l')}\nGWR:{dat.get('total_w')}/{dat.get('total_l')} WR:{wr}%\nBanned:{dat.get('banned')}\nUser:{dat.get('username')} {dat.get('first_name')}\nPocket:{dat.get('pocket_id','')}")
+            bot.send_message(m.chat.id, f"🔍 {uid_}:\nLevel:{dat.get('level')}\nDeposit:${dat.get('deposit')}\nD:{dat.get('daily_w')}/{dat.get('daily_l')}\nGWR:{dat.get('total_w',0)}/{dat.get('total_l',0)} WR:{wr}%\nBanned:{dat.get('banned')}\nUser:{dat.get('username')} {dat.get('first_name')}\nPocket:{dat.get('pocket_id','')}")
         except: bot.send_message(m.chat.id, "Usage: /search 123")
 
         @bot.callback_query_handler(func=lambda c: True)
@@ -262,7 +262,7 @@ def cb(c):
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         WAIT_STATE[uid]={"step":"await_pocket_id"}
         kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-        msg=bot.send_message(chat_id, f"🔓 UNLOCK VERIFICATION 🔓\n\n📩 Send your Pocket Option ID (numbers only)\nExample: `12345678`\n\n🔐 System will VERIFY you registered via our Official Link!\n⚠️ Random IDs will be REJECTED!\n\n✅ Must register via Official Link first:\n🎁 Promo Code: {PROMO_CODE} (60% Bonus) - AUTO APPLIED\n👉 Find ID: Pocket Option App > Profile > ID", reply_markup=kb)
+        msg=bot.send_message(chat_id, f"🔓 UNLOCK VERIFICATION 🔓\n\n📩 Send your Pocket Option ID (numbers only)\nExample: `12345678`\n\n🔐 System will VERIFY you registered via our Official Link!\n⚠️ Random IDs will be REJECTED if STRICT_MODE ON!\n\n✅ Must register via Official Link first:\n🎁 Promo Code: {PROMO_CODE} (60% Bonus) - AUTO APPLIED\n👉 Find ID: Pocket Option App > Profile > ID", reply_markup=kb)
         LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data=="get_signal":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
@@ -415,32 +415,33 @@ def cb(c):
             WAIT_STATE[uid]={"step":"admin_search"}; bot.send_message(chat_id, "🔍 Search:\nSend user_id e.g. `123456`")
         bot.answer_callback_query(c.id); return
 
+@bot.message_handler(func=lambda m: WAIT_STATE.get(str(m.from_user.id), {}).get("step")=="await_pocket_id")
+def handle_pocket_id(m):
+    uid=str(m.from_user.id); pocket_id=m.text.strip()
+    if not pocket_id.isdigit() or len(pocket_id)<5 or len(pocket_id)>10:
+        bot.send_message(m.chat.id, "❌ Invalid Pocket ID! Send numbers only, 5-10 digits. Example: 12345678")
+        return
+    u=get_user(uid)
+    STRICT_MODE=False
+    is_verified=u.get("deposit",0)>0 or u.get("level","LOCKED")!="LOCKED"
+    if not is_verified and STRICT_MODE:
+        kb=types.InlineKeyboardMarkup(row_width=1)
+        kb.add(types.InlineKeyboardButton(f"🎯 Register With Promo {PROMO_CODE} (60% Bonus) 🎁", url=get_affiliate_link(uid)))
+        kb.add(types.InlineKeyboardButton("🔄 I Registered, Check Again", callback_data="unlock_backup"))
+        kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
+        bot.send_message(m.chat.id, f"❌ Pocket ID {pocket_id} NOT FOUND in our affiliate system! 🛑\n\nYou must register via OUR Official Link first!\n\n1️⃣ Register here with promo {PROMO_CODE} (60% Bonus AUTO-APPLIED)\n2️⃣ Deposit minimum $20\n3️⃣ Then enter ID again\n\n⚠️ Random IDs will NOT work - Only IDs that joined via our link!", reply_markup=kb)
+        return
+    u["pocket_id"]=pocket_id
+    if u["level"]=="LOCKED":
+        u["level"]="NONE"; save()
+        bot.send_message(m.chat.id, f"✅ Verified! Pocket ID {pocket_id} Saved! ✅\n\n🎉 UNLOCKED! You now have 5 FREE signals/day! 🚀\n\n🎁 Promo {PROMO_CODE} (60% Bonus) Applied!")
+    else:
+        save(); bot.send_message(m.chat.id, f"✅ Pocket ID {pocket_id} Updated & Verified! You are {u['level']} level.\n🎁 Promo: {PROMO_CODE} (60% Bonus)")
+    WAIT_STATE.pop(uid, None); bot.send_message(m.chat.id, "➡️ Back to menu:", reply_markup=main_menu(uid))
+
 @bot.message_handler(content_types=['text','photo','video','document'])
 def broadcast_content(m):
     uid=str(m.from_user.id); ws=WAIT_STATE.get(uid)
-    if ws and ws.get("step")=="await_pocket_id" and m.content_type=="text":
-        pocket_id=m.text.strip()
-        if not pocket_id.isdigit() or len(pocket_id)<5 or len(pocket_id)>10:
-            bot.send_message(m.chat.id, "❌ Invalid Pocket ID! Send numbers only, 5-10 digits. Example: 12345678")
-            return
-        u=get_user(uid)
-        # SECURITY FIX: ONLY IDs REGISTERED VIA OUR LINK (postback verification)
-        has_postback = u.get("deposit",0) > 0 or u.get("level","LOCKED")!= "LOCKED"
-        # If still LOCKED = no postback = reject
-        if u["level"]=="LOCKED" and u.get("deposit",0)==0:
-            kb=types.InlineKeyboardMarkup(row_width=1)
-            kb.add(types.InlineKeyboardButton(f"🎯 Register With Promo {PROMO_CODE} (60% Bonus) 🎁", url=get_affiliate_link(uid)))
-            kb.add(types.InlineKeyboardButton("🔄 I Registered, Check Again", callback_data="unlock_backup"))
-            kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-            bot.send_message(m.chat.id, f"❌ Pocket ID {pocket_id} NOT FOUND in our affiliate system! 🛑\n\nYou must register via OUR Official Link first!\n\n1️⃣ Register here with promo {PROMO_CODE} (60% Bonus AUTO-APPLIED)\n2️⃣ Deposit minimum $20\n3️⃣ Then enter ID again\n\n⚠️ Random IDs will NOT work - Only IDs that joined via our link!", reply_markup=kb)
-            return
-        u["pocket_id"]=pocket_id
-        if u["level"]=="LOCKED":
-            u["level"]="NONE"; save()
-            bot.send_message(m.chat.id, f"✅ Verified! Pocket ID {pocket_id} found in our system! ✅\n\n🎉 UNLOCKED! You now have 5 FREE signals/day! 🚀\n\n🎁 Promo {PROMO_CODE} (60% Bonus) Applied!")
-        else:
-            save(); bot.send_message(m.chat.id, f"✅ Pocket ID {pocket_id} Updated & Verified! You are {u['level']} level.\n🎁 Promo: {PROMO_CODE} (60% Bonus)")
-        WAIT_STATE.pop(uid, None); bot.send_message(m.chat.id, "➡️ Back to menu:", reply_markup=main_menu(uid)); return
     if not ws or uid!=OWNER_ID: return
     if ws.get("step")=="admin_adduser":
         try:
@@ -496,8 +497,8 @@ def daily_reset_loop():
 if __name__=="__main__":
     bot.remove_webhook()
     threading.Thread(target=daily_reset_loop, daemon=True).start()
-    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8080)))).start()
-    print(f"🚀 WW POCKET BOT V14.6 RUNNING with PROMO {PROMO_CODE} 60% + BUTTON LINKS")
+    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8080)), threaded=True)).start()
+    print(f"🚀 WW POCKET BOT V14.7 FIXED RUNNING with PROMO {PROMO_CODE} 60% + BUTTON LINKS")
     while True:
-        try: bot.infinity_polling(timeout=60, long_polling_timeout=60)
+        try: bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
         except Exception as e: print(f"Polling error {e}, restart in 5s"); time.sleep(5)
