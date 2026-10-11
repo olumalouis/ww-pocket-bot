@@ -249,7 +249,7 @@ def admin_cmd(m):
             bot.send_message(m.chat.id, f"🔍 {uid_}:\nLevel:{dat.get('level')}\nDeposit:${dat.get('deposit')}\nD:{dat.get('daily_w')}/{dat.get('daily_l')}\nGWR:{dat.get('total_w',0)}/{dat.get('total_l',0)} WR:{wr}%\nBanned:{dat.get('banned')}\nUser:{dat.get('username')} {dat.get('first_name')}\nPocket:{dat.get('pocket_id','')}")
         except: bot.send_message(m.chat.id, "Usage: /search 123")
 
-        @bot.callback_query_handler(func=lambda c: True)
+@bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     uid=str(c.from_user.id); u=get_user(uid); chat_id=c.message.chat.id
     if u.get("banned") and uid!=OWNER_ID:
