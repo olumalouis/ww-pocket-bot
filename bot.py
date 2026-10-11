@@ -116,17 +116,21 @@ def gen_signal_auto_strong(market_pairs):
 def home():
     return f"WW POCKET SIGNALS V15 ANTI-FAKE + GLOBAL WR + {PROMO_CODE} 60% PROMO RUNNING 🚀"
 
-@app.route("/postback")
+@app.route("/postback", methods=["GET","POST"])
 def postback():
     PASSWORD="WW12345"
-    secret=request.args.get("secret") or request.args.get("pass") or request.args.get("password") or ""
-    click_id=request.args.get("click_id") or request.args.get("PocketPartnersClickID") or request.args.get("subid") or ""
-    trader_id=request.args.get("trader_id") or request.args.get("TraderID") or ""
-    sumdep=request.args.get("sumdep") or request.args.get("SumDeposits") or request.args.get("deposit") or "0"
-    event=request.args.get("event") or ""
-    if secret!=PASSWORD and str(click_id)!=OWNER_ID and secret!="":
-        if secret and secret!=PASSWORD:
-            return "Unauthorized",401
+    data=request.values
+    try:
+        raw=request.get_json(force=False, silent=True) or {}
+    except:
+        raw={}
+    secret=data.get("secret") or data.get("pass") or data.get("password") or raw.get("secret") or ""
+    click_id=data.get("click_id") or data.get("PocketPartnersClickID") or data.get("subid") or data.get("sub_id") or raw.get("click_id") or raw.get("subid") or ""
+    trader_id=data.get("trader_id") or data.get("TraderID") or data.get("trader") or raw.get("trader_id") or ""
+    sumdep=data.get("sumdep") or data.get("SumDeposits") or data.get("deposit") or data.get("amount") or raw.get("sumdep") or "0"
+    event=data.get("event") or raw.get("event") or ""
+    if secret and secret!=PASSWORD:
+        return f"Unauthorized secret={secret}",401
     if not click_id:
         return "NO CLICK ID - Need {PocketPartnersClickID}",400
     try: dep=float(sumdep or 0)
@@ -134,15 +138,22 @@ def postback():
     if trader_id:
         TRADERS[str(trader_id)]=str(click_id)
         save_traders()
-    u=get_user(click_id)
+    u=get_user(str(click_id))
     old_dep=float(u.get("deposit",0) or 0)
-    if event=="reg" or (dep==0 and old_dep==0):
-        if u.get("level","LOCKED")=="LOCKED":
+    # FIXED: Always unlock if LOCKED and we have trader_id or reg event
+    if u.get("level","LOCKED")=="LOCKED":
+        if trader_id or event=="reg" or dep==0:
             u["level"]="NONE"
-        if trader_id:
-            u["pocket_id"]=str(trader_id)
-        if old_dep==0:
-            u["deposit"]=0
+            if trader_id:
+                u["pocket_id"]=str(trader_id)
+            if old_dep==0:
+                u["deposit"]=0
+    else:
+        if event=="reg" or (dep==0 and old_dep==0):
+            if u.get("level","LOCKED")=="LOCKED":
+                u["level"]="NONE"
+            if trader_id:
+                u["pocket_id"]=str(trader_id)
     if dep>0:
         total_dep=max(old_dep, dep)
         if old_dep>0 and dep>old_dep:
@@ -158,9 +169,9 @@ def postback():
             u["pocket_id"]=str(trader_id)
     save()
     try:
-        if event=="reg" or (dep==0 and u["level"]!="LOCKED"):
+        if dep==0:
             bot.send_message(int(click_id), f"✅ Registration Confirmed! 🎉\n🆔 Pocket ID: {trader_id}\n🚀 Bot UNLOCKED! 5 FREE signals/day!\n🎁 Promo {PROMO_CODE} 60% active!\n💰 Deposit $20 to get STARTER!")
-        elif dep>0:
+        else:
             lim="UNLIMITED" if u["level"]=="VIP" else "100/day" if u["level"]=="PRO" else "20/day" if u["level"]=="STARTER" else "5/day"
             bot.send_message(int(click_id), f"💰 Deposit Detected! ${u['deposit']} ✅\n🎉 Upgraded to {u['level']}! Limit: {lim} 🚀\n🆔 ID: {trader_id}")
     except: pass
