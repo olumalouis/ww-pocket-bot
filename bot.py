@@ -25,7 +25,7 @@ app=Flask(__name__)
 bot=telebot.TeleBot(BOT_TOKEN, threaded=False)
 
 def get_conn():
-    return psycopg2.connect(DATABASE_URL, sslmode='require')
+    return psycopg2.connect(DATABASE_URL, sslmode='require') if DATABASE_URL else None
 
 def init_db():
     if not DATABASE_URL: return
@@ -51,7 +51,9 @@ def load():
 
 def save():
     if not DATABASE_URL:
-        with open(DATA_FILE,"w") as f: json.dump(USERS,f)
+        try:
+            with open(DATA_FILE,"w") as f: json.dump(USERS,f)
+        except: pass
         return
     try:
         conn=get_conn(); cur=conn.cursor()
@@ -77,7 +79,9 @@ def load_traders():
 
 def save_traders():
     if not DATABASE_URL:
-        with open(TRADERS_FILE,"w") as f: json.dump(TRADERS,f)
+        try:
+            with open(TRADERS_FILE,"w") as f: json.dump(TRADERS,f)
+        except: pass
         return
     try:
         conn=get_conn(); cur=conn.cursor()
@@ -177,10 +181,14 @@ def postback():
     event=data.get("event") or raw.get("event") or ""
     if secret and secret!=PASSWORD:
         return f"Unauthorized secret={secret}",401
-    if not click_id:
-        return "NO CLICK ID - Need {PocketPartnersClickID}",400
     try: dep=float(sumdep or 0)
     except: dep=0.0
+    if trader_id and not click_id:
+        TRADERS[str(trader_id)]=f"AFFILIATE_{str(trader_id)}"
+        save_traders()
+        return f"OK AFFILIATE SAVED trader_id={trader_id} dep={dep} event={event} NO CLICK_ID",200
+    if not click_id:
+        return "NO CLICK ID - Need {PocketPartnersClickID}",400
     if trader_id:
         TRADERS[str(trader_id)]=str(click_id)
         save_traders()
