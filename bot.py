@@ -1,4 +1,4 @@
-import os, json, random, time, threading, requests
+import os, json, random, time, threading, requests, psycopg2
 from datetime import datetime
 from flask import Flask, request
 import telebot
@@ -10,6 +10,7 @@ DATA_FILE="db.json"
 TRADERS_FILE="traders.json"
 TWELVE_API=os.environ.get("TWELVE_API","7fdda54e0e074a74b9ee0098ca2388c8")
 STRICT_MODE=os.environ.get("STRICT_MODE","true").lower()=="true"
+DATABASE_URL=os.environ.get("DATABASE_URL")
 
 AFFILIATE_BASE="https://u3.shortink.io/register?utm_campaign=868502&utm_source=affiliate&utm_medium=sr&a=jnLBWcb8IEyL7T&al=1801402&ac=wwpocket100&cid=984351"
 PROMO_CODE="KVF341"
@@ -23,24 +24,69 @@ def get_affiliate_link(uid):
 app=Flask(__name__)
 bot=telebot.TeleBot(BOT_TOKEN, threaded=False)
 
+def get_conn():
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
+
+def init_db():
+    if not DATABASE_URL: return
+    conn=get_conn(); cur=conn.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS users (uid TEXT PRIMARY KEY, data JSONB);")
+    cur.execute("CREATE TABLE IF NOT EXISTS traders (trader_id TEXT PRIMARY KEY, click_id TEXT);")
+    conn.commit(); cur.close(); conn.close()
+
 def load():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE,"r") as f: return json.load(f)
-        except: return {}
-    return {}
+    if not DATABASE_URL:
+        if os.path.exists(DATA_FILE):
+            try:
+                with open(DATA_FILE,"r") as f: return json.load(f)
+            except: return {}
+        return {}
+    try:
+        conn=get_conn(); cur=conn.cursor()
+        cur.execute("SELECT uid, data FROM users")
+        rows=cur.fetchall()
+        cur.close(); conn.close()
+        return {uid: data for uid, data in rows}
+    except: return {}
+
 def save():
-    with open(DATA_FILE,"w") as f: json.dump(USERS,f)
+    if not DATABASE_URL:
+        with open(DATA_FILE,"w") as f: json.dump(USERS,f)
+        return
+    try:
+        conn=get_conn(); cur=conn.cursor()
+        for uid, data in USERS.items():
+            cur.execute("INSERT INTO users(uid,data) VALUES(%s,%s) ON CONFLICT(uid) DO UPDATE SET data=%s", (uid, json.dumps(data), json.dumps(data)))
+        conn.commit(); cur.close(); conn.close()
+    except: pass
 
 def load_traders():
-    if os.path.exists(TRADERS_FILE):
-        try:
-            with open(TRADERS_FILE,"r") as f: return json.load(f)
-        except: return {}
-    return {}
-def save_traders():
-    with open(TRADERS_FILE,"w") as f: json.dump(TRADERS,f)
+    if not DATABASE_URL:
+        if os.path.exists(TRADERS_FILE):
+            try:
+                with open(TRADERS_FILE,"r") as f: return json.load(f)
+            except: return {}
+        return {}
+    try:
+        conn=get_conn(); cur=conn.cursor()
+        cur.execute("SELECT trader_id, click_id FROM traders")
+        rows=cur.fetchall()
+        cur.close(); conn.close()
+        return {tid: cid for tid, cid in rows}
+    except: return {}
 
+def save_traders():
+    if not DATABASE_URL:
+        with open(TRADERS_FILE,"w") as f: json.dump(TRADERS,f)
+        return
+    try:
+        conn=get_conn(); cur=conn.cursor()
+        for tid, cid in TRADERS.items():
+            cur.execute("INSERT INTO traders(trader_id,click_id) VALUES(%s,%s) ON CONFLICT(trader_id) DO UPDATE SET click_id=%s", (tid, cid, cid))
+        conn.commit(); cur.close(); conn.close()
+    except: pass
+
+init_db()
 USERS=load()
 TRADERS=load_traders()
 LAST_BOT_MSG={}
@@ -114,7 +160,7 @@ def gen_signal_auto_strong(market_pairs):
 
 @app.route("/")
 def home():
-    return f"WW POCKET SIGNALS V15 ANTI-FAKE + GLOBAL WR + {PROMO_CODE} 60% PROMO RUNNING 🚀 - PORT {os.environ.get('PORT', 8080)} OK"
+    return f"WW POCKET SIGNALS V16 DATABASE + UNLOCK + {PROMO_CODE} 60% RUNNING 🚀 - PORT {os.environ.get('PORT', 8080)} OK"
 
 @app.route("/postback", methods=["GET","POST"])
 def postback():
@@ -140,7 +186,6 @@ def postback():
         save_traders()
     u=get_user(str(click_id))
     old_dep=float(u.get("deposit",0) or 0)
-    # FIXED: Always unlock if LOCKED and we have trader_id or reg event
     if u.get("level","LOCKED")=="LOCKED":
         if trader_id or event=="reg" or dep==0:
             u["level"]="NONE"
@@ -227,9 +272,10 @@ def start(m):
     u["first_name"]= (m.from_user.first_name or "") + " " + (m.from_user.last_name or "")
     u["first_name"]=u["first_name"].strip()
     if u["level"]=="LOCKED":
-        txt=f"🔒 Welcome {u['first_name']}! You are LOCKED 🔒\n\n👉 Register via Official Link to unlock 5 free signals per day 🎯\n\n🎁 Promo Code: {PROMO_CODE} = 60% Bonus (AUTO-APPLIED)!\n\n✅ Every pro started FREE - Begin your journey! 🚀\n\n👇 Click button below to register with promo!"
+        txt=f"🔒 Welcome {u['first_name']}! You are LOCKED 🔒\n\n👉 Register via Official Link to unlock 5 free signals per day 🎯\n\n🎁 Promo Code: {PROMO_CODE} = 60% Bonus (AUTO-APPLIED)!\n\n✅ Every pro started FREE - Begin your journey! 🚀\n\n👇 Click button below to register with promo!\n🔓 Already registered outside bot? Click UNLOCK!"
         kb=types.InlineKeyboardMarkup(row_width=1)
         kb.add(types.InlineKeyboardButton(f"🔗 Register + Promo {PROMO_CODE} (60% Bonus) 🎁", url=get_affiliate_link(uid)))
+        kb.add(types.InlineKeyboardButton("🔓 I Registered Outside - Unlock Bot 🔓", callback_data="unlock_check"))
         kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
         kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
         msg=bot.send_message(m.chat.id, txt, reply_markup=kb)
@@ -309,11 +355,20 @@ def cb(c):
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         txt=f"👋 Welcome {u.get('first_name','Smart Investor')}! {u['level']} 💹\n📊 Used: {u['used_today']}\nREAL 30 + OTC 45 + 3 Indicators 📈\n🎁 Promo: {PROMO_CODE} 60% Bonus"
         msg=bot.send_message(chat_id, txt, reply_markup=main_menu(uid)); LAST_BOT_MSG[uid]=[msg.message_id]; return
+    if c.data=="unlock_check":
+        clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
+        WAIT_STATE[uid]={"step":"unlock_id"}
+        txt=f"🔓 UNLOCK CHECK - Outside Registration 🔍\n\nYou registered via my affiliate link OUTSIDE bot?\n\n👇 Send your Pocket Option Trader ID (numbers only)\nExample: 12345678\n\nWe will check if you are under my affiliate link!\nIf YES → Bot unlocks instantly! ✅\nIf NO → Must register via my link! 🔒\n\n🎁 Promo {PROMO_CODE} 60% must be used!"
+        kb=types.InlineKeyboardMarkup()
+        kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
+        msg=bot.send_message(chat_id, txt, reply_markup=kb)
+        LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data=="get_signal":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         if u["level"]=="LOCKED":
             kb=types.InlineKeyboardMarkup(row_width=1)
             kb.add(types.InlineKeyboardButton(f"🎁 Register with Promo {PROMO_CODE} - 60% Bonus 🔥", url=get_affiliate_link(uid)))
+            kb.add(types.InlineKeyboardButton("🔓 I Registered Outside - Unlock Bot 🔓", callback_data="unlock_check"))
             kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
             kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
             kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
@@ -463,6 +518,29 @@ def cb(c):
 @bot.message_handler(content_types=['text','photo','video','document'])
 def broadcast_content(m):
     uid=str(m.from_user.id); ws=WAIT_STATE.get(uid)
+    if ws and ws.get("step")=="unlock_id":
+        trader_id_input = ''.join(filter(str.isdigit, m.text.strip()))
+        if not trader_id_input:
+            bot.send_message(m.chat.id, "❌ Invalid ID! Send numbers only e.g. 12345678")
+            return
+        if trader_id_input in TRADERS:
+            u = get_user(uid)
+            u["level"]="NONE"
+            u["pocket_id"]=trader_id_input
+            if u.get("deposit",0)==0: u["deposit"]=0
+            TRADERS[trader_id_input]=uid
+            save(); save_traders()
+            kb=types.InlineKeyboardMarkup(row_width=1)
+            kb.add(types.InlineKeyboardButton("📊 Get Signals 🚀", callback_data="get_signal"))
+            kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
+            bot.send_message(m.chat.id, f"✅ VERIFIED! You ARE under my affiliate link! 🎉\n🆔 Pocket ID: {trader_id_input}\n🚀 Bot UNLOCKED! 5 FREE signals/day!\n💰 Deposit $20 for STARTER 20/day!\n🎁 Promo {PROMO_CODE} 60% active!\n\nNow click GET SIGNAL!", reply_markup=kb)
+        else:
+            kb=types.InlineKeyboardMarkup(row_width=1)
+            kb.add(types.InlineKeyboardButton(f"🔗 Register Now + {PROMO_CODE} 60% 🎁", url=get_affiliate_link(uid)))
+            kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
+            bot.send_message(m.chat.id, f"❌ ID {trader_id_input} NOT found under my affiliate link! 🔒\n\nPocket didn't send us your ID yet!\n\nPossible reasons:\n1️⃣ You didn't use MY link to register\n2️⃣ You didn't use promo {PROMO_CODE}\n3️⃣ Postback delayed (wait 2-3 mins)\n\n👇 Click below to register with 60% Bonus!\n🎁 Promo Code: {PROMO_CODE} auto-applied!", reply_markup=kb)
+        WAIT_STATE.pop(uid, None)
+        return
     if not ws or uid!=OWNER_ID: return
     if ws.get("step")=="admin_adduser":
         try:
@@ -516,7 +594,6 @@ def daily_reset_loop():
         time.sleep(30)
 
 def run_flask():
-    # RAILWAY FIX - USE PORT 8080 FROM ENV
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, threaded=True)
 
@@ -531,168 +608,10 @@ if __name__=="__main__":
         pass
     threading.Thread(target=daily_reset_loop, daemon=True).start()
     threading.Thread(target=run_flask, daemon=True).start()
-    print(f"🚀 WW POCKET BOT V15 ANTI-FAKE + GLOBAL WR RUNNING with PROMO {PROMO_CODE} 60% 🔥 PORT {os.environ.get('PORT', 8080)}")
+    print(f"🚀 WW POCKET BOT V16 DATABASE + UNLOCK RUNNING with PROMO {PROMO_CODE} 60% 🔥 PORT {os.environ.get('PORT', 8080)}")
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
         except Exception as e:
             print(f"⚠️ Polling error {e}, restart in 5s ⏳")
-            time.sleep(5)@bot.callback_query_handler(func=lambda c: True)
-def cb(c):
-    uid=str(c.from_user.id); u=get_user(uid); chat_id=c.message.chat.id
-    if u.get("banned") and uid!=OWNER_ID:
-        bot.answer_callback_query(c.id,"🚫 You are banned!"); return
-    if c.data=="menu":
-        clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
-        txt=f"👋 Welcome {u.get('first_name','Smart Investor')}! {u['level']} 💹\n📊 Used: {u['used_today']}\nREAL 30 + OTC 45 + 3 Indicators 📈\n🎁 Promo: {PROMO_CODE} 60% Bonus"
-        msg=bot.send_message(chat_id, txt, reply_markup=main_menu(uid)); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data=="get_signal":
-        clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
-        if u["level"]=="LOCKED":
-            kb=types.InlineKeyboardMarkup(row_width=1)
-            kb.add(types.InlineKeyboardButton(f"🎁 Register with Promo {PROMO_CODE} - 60% Bonus 🔥", url=get_affiliate_link(uid)))
-            kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
-            kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
-            kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-            msg=bot.send_message(chat_id, f"🔒 You are LOCKED! 🔒\n\n👉 Register via Official Link to unlock 5 free signals per day 🎯\n🎁 Promo Code: {PROMO_CODE} for 60% Bonus (AUTO-APPLIED)!\n\n💎 Every pro started FREE - Begin now!", reply_markup=kb)
-            LAST_BOT_MSG[uid]=[msg.message_id]; return
-        limits={"NONE":5,"STARTER":20,"PRO":100,"VIP":999999,"LOCKED":0}; lim=limits.get(u["level"],5)
-        if uid!=OWNER_ID and u["used_today"]>=lim:
-            msg=bot.send_message(chat_id, f"🔒 Daily limit {lim} reached! Upgrade to VIP for unlimited! 💎\n🎁 Promo {PROMO_CODE} 60%", reply_markup=main_menu(uid)); LAST_BOT_MSG[uid]=[msg.message_id]; return
-        msg=bot.send_message(chat_id, "📊 Select Market:", reply_markup=market_menu()); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data.startswith("market_"):
-        clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id); market=c.data.split("_")[1]
-        msg=bot.send_message(chat_id, f"📊 {market} Selected!\nSelect Mode:", reply_markup=mode_menu(market)); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data.startswith("mode_"):
-        _, mode, market=c.data.split("_"); clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
-        if market=="REAL" and not is_real_market_open():
-            kb=types.InlineKeyboardMarkup(row_width=1); kb.add(types.InlineKeyboardButton("🌙 Trade OTC 45 (24/7) ✅", callback_data="market_OTC")); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-            msg=bot.send_message(chat_id, "⚠️ REAL Market CLOSED! 🔒\n\n🌞 REAL 30: Mon-Fri only!\n🕙 Closes Fri 22:00 GMT\n🕙 Opens Sun 22:00 GMT\n\n✅ OTC 45 is OPEN 24/7 - Trade now! 🌙", reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
-        if mode=="MANUAL":
-            msg=bot.send_message(chat_id, f"🎯 Manual Mode {market}\nPick Pair + Expiry:", reply_markup=pairs_keyboard(market,0,"M3")); LAST_BOT_MSG[uid]=[msg.message_id]
-        else:
-            market_pairs=PAIRS_REAL if market=="REAL" else PAIRS_OTC; bot.send_message(chat_id, "🔍 Hunting STRONG Triple signals... 150x scan...")
-            pair, direction, strength, rsi, ema_sig, stoch, price, conf, expiry=gen_signal_auto_strong(market_pairs); market_name="REAL 30 (24/5) 🌞" if market=="REAL" else "OTC 45 (24/7) 🌙"; acc=f"{conf-5}-{conf}%" if conf<85 else "80-87%"; u["used_today"]+=1; save()
-            kb=types.InlineKeyboardMarkup(row_width=2); kb.add(types.InlineKeyboardButton("✅ WIN 🎉", callback_data=f"win_{pair}"), types.InlineKeyboardButton("❌ LOSS 💔", callback_data=f"loss_{pair}")); kb.add(types.InlineKeyboardButton("📊 Next Signal 🚀", callback_data="get_signal"), types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-            txt=f"🎯 AUTO STRONG SIGNAL 🤖\n\n💱 Pair: {pair}\n📊 Market: {market_name}\n💹 Real Price: {price} 💰\n🔮 Direction: {direction}\n⏰ Expiry: {expiry}\n📈 RSI({rsi}) | EMA200: {ema_sig} | Stoch: {stoch}\n💪 Strength: {strength}\n🎯 Accuracy: {acc} ✅\n🔥 Level: {u['level']} 👑\n\n⚠️ Trade on Pocket Option 💰\n🎁 Promo: {PROMO_CODE} 60%"
-            msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]
-        return
-    if c.data.startswith("pairs_"):
-        _, market, page, expiry=c.data.split("_"); try_delete(chat_id, c.message.message_id)
-        msg=bot.send_message(chat_id, f"Pairs {market} Page {int(page)+1}:", reply_markup=pairs_keyboard(market,int(page),expiry)); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data.startswith("expiry_"):
-        _, market, page, expiry=c.data.split("_"); try_delete(chat_id, c.message.message_id)
-        msg=bot.send_message(chat_id, f"Expiry set to {expiry}", reply_markup=pairs_keyboard(market,int(page),expiry)); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data.startswith("pick_"):
-        _, market, pair_part, expiry=c.data.split("_",3); pair=pair_part; clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id); market_name="REAL 30 (24/5) 🌞" if market=="REAL" else "OTC 45 (24/7) 🌙"
-        p, direction, strength, rsi, ema_sig, stoch, price, conf, exp=gen_signal_manual(pair, expiry); acc=f"{conf-5}-{conf}%" if conf<85 else "80-87%"; u["used_today"]+=1; save()
-        kb=types.InlineKeyboardMarkup(row_width=2); kb.add(types.InlineKeyboardButton("✅ WIN 🎉", callback_data=f"win_{pair}"), types.InlineKeyboardButton("❌ LOSS 💔", callback_data=f"loss_{pair}")); kb.add(types.InlineKeyboardButton("📊 Next Signal 🚀", callback_data="get_signal"), types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-        txt=f"🎯 MANUAL SIGNAL - 3 Indicators 📈\n\n💱 Pair: {p}\n📊 Market: {market_name}\n💹 Real Price: {price} 💰\n🔮 Direction: {direction}\n⏰ Expiry: {expiry}\n📈 RSI({rsi}) | EMA200: {ema_sig} | Stoch: {stoch}\n💪 Strength: {strength}\n🎯 Accuracy: {acc} ({conf}% Conf) ✅\n🔥 Level: {u['level']} 👑\n\n⚠️ Trade on Pocket Option 💰\n⏰ Valid 1-2 min ⏳\n🎁 Promo: {PROMO_CODE} 60%"
-        msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data.startswith("win_") or c.data.startswith("loss_"):
-        is_win=c.data.startswith("win_"); clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
-        if is_win:
-            u["daily_w"]+=1;u["total_w"]+=1;u["streak"]+=1;u["loss_streak"]=0
-            txt=f"💥 BOOM! WIN CONFIRMED! 💰\n🔥 Streak: {u['streak']} | Today: {u['daily_w']}W/{u['daily_l']}L"
-        else:
-            u["daily_l"]+=1;u["total_l"]+=1;u["loss_streak"]+=1;u["streak"]=0
-            if u["loss_streak"]>=6:
-                txt=f"🚨 6 LOSSES IN A ROW - STOP! 🛑\n\nBoss, Real talk! 💔\n📉 Market is CHOPPY & ANGRY today!\n🧠 Your brain is TILTED now - Don't revenge trade!\n\n✅ PRO MOVE:\n☕ Take 30-60 min break\n📊 Come back fresh = Win streak!\n💎 Capital saved = Capital earned!\n\nWe protect your bag Boss! 💰🫡\n\n📊 Today: {u['daily_w']}W/{u['daily_l']}L"
-            else:
-                txt=f"{random.choice(MOTS)}\n📊 Loss Streak: {u['loss_streak']} | Today: {u['daily_w']}W/{u['daily_l']}L"
-        save(); kb=types.InlineKeyboardMarkup(row_width=2); kb.add(types.InlineKeyboardButton("📊 Next Signal 🚀", callback_data="get_signal"), types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-        msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; bot.answer_callback_query(c.id,"✅ Recorded"); return
-    if c.data=="status":
-        clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
-        limits={"NONE":5,"STARTER":20,"PRO":100,"VIP":"∞","LOCKED":0}
-        txt=f"📈 YOUR STATUS 📊\n\n👤 Name: {u.get('first_name','')} {u.get('username','')}\n👑 Level: {u['level']}\n💰 Deposit: ${u['deposit']}\n📊 Daily: {u['daily_w']}W/{u['daily_l']}L\n📊 Used: {u['used_today']}/{limits.get(u['level'],5)}\n🔥 Streak: {u['streak']}\n⏰ Reset: 00:00 UTC\n🎁 Promo: {PROMO_CODE} (60% Bonus)\n💎 Pocket ID: {u.get('pocket_id','Not set')}"
-        kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu")); msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data=="how":
-        clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
-        txt=f"📚 HOW IT WORKS - 5 STEPS:\n\n1️⃣ Register via Official Link to unlock 5 free signals/day 🔗\n2️⃣ Use Promo Code: {PROMO_CODE} for 60% Bonus (AUTO-APPLIED) 🎁\n3️⃣ Deposit $20+ to unlock more 💰\n4️⃣ Click GET SIGNAL 📊\n5️⃣ Pick Market (REAL 30/OTC 45) + Mode\n\n📈 3 Indicators = 85%+ Accuracy!\n🔓 Auto unlock via our link - No manual ID needed!"
-        kb=types.InlineKeyboardMarkup(); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu")); msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data=="deposit":
-        clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
-        txt=f"💰 DEPOSIT PAGE 💳\n\n🎁 PROMO CODE: {PROMO_CODE} = 60% Bonus!\n\n👇 Click below to deposit directly:\n\n✅ 100% Secure - Pocket Option Official\n✅ Use Promo {PROMO_CODE} on deposit page (60%)\n✅ Instant upgrade after deposit\n\nYour Level: {u['level']} | Deposit: ${u['deposit']}"
-        kb=types.InlineKeyboardMarkup(row_width=1)
-        kb.add(types.InlineKeyboardButton("💰 Deposit Direct + 60% Bonus 🔥", url=DEPOSIT_DIRECT))
-        kb.add(types.InlineKeyboardButton("🔐 LOGIN to Pocket Option", url=LOGIN_URL))
-        kb.add(types.InlineKeyboardButton(f"🎁 Promo: {PROMO_CODE} 60%", url=DEPOSIT_DIRECT))
-        kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-        msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data=="upgrade":
-        clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
-        if u["level"]=="VIP":
-            txt=f"👑 YOU ARE VIP BOSS! 💎🎉\n\nYOU HAVE UNLIMITED POWER! 🚀\n\n✅ 80-87% WR + ∞ Signals/Day\n✅ No limits - Trade like a BOSS!\n✅ Want to add more balance? Deposit again! 👑\n\nYour Level: VIP | Deposit: ${u['deposit']}\n🎁 Promo {PROMO_CODE} (60% Bonus) - Use on next deposit!"
-            kb=types.InlineKeyboardMarkup(row_width=1)
-            kb.add(types.InlineKeyboardButton("💰 Add More Balance 🔥", url=DEPOSIT_DIRECT))
-            kb.add(types.InlineKeyboardButton("📊 Get VIP Signals 🚀", callback_data="get_signal"))
-            kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-        else:
-            txt=f"💎 YOUR PATH TO BOSS MODE 🚀\n\n🎁 PROMO CODE: {PROMO_CODE} = 60% BONUS!\n\n🆓 FREE: 5/day 55-65%\nRegister via Official Link to unlock 🎯\n\n🟢 STARTER: $20+ = 20/day 65-70%\nSmall deposit, BIG mindset! 4X chances! 💪\n\n🔵 PRO: $50+ = 100/day 70-80%\nGo PRO, think like a millionaire! 20X power! 💵\n\n👑 VIP: $100+ = UNLIMITED 80-87%\nUltimate Boss Mode - No limits! 👑🔥\n\nYour Level: {u['level']} Deposit: ${u['deposit']}\n🎁 Use {PROMO_CODE} on Deposit! (60%)"
-            kb=types.InlineKeyboardMarkup(row_width=1)
-            if u["level"]!="LOCKED":
-                kb.add(types.InlineKeyboardButton("💰 Deposit Now + 60% Bonus 🔥", url=DEPOSIT_DIRECT))
-            else:
-                kb.add(types.InlineKeyboardButton(f"🎯 Register + Promo {PROMO_CODE} 60%", url=get_affiliate_link(uid)))
-            kb.add(types.InlineKeyboardButton("💪 LEVEL UP STARTER - 4X Power ($20+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else get_affiliate_link(uid)))
-            kb.add(types.InlineKeyboardButton("💵 GO PRO - 20X Power ($50+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else get_affiliate_link(uid)))
-            kb.add(types.InlineKeyboardButton("👑 BECOME VIP BOSS - ∞ Power ($100+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else get_affiliate_link(uid)))
-            kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
-            kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-        msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data=="admin":
-        if uid!=OWNER_ID: return
-        kb=types.InlineKeyboardMarkup(row_width=2)
-        kb.add(types.InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast"), types.InlineKeyboardButton("👥 Users", callback_data="admin_users"))
-        kb.add(types.InlineKeyboardButton("📊 Stats", callback_data="admin_stats"), types.InlineKeyboardButton("🔄 Reset Daily All", callback_data="admin_reset"))
-        kb.add(types.InlineKeyboardButton("👤 Add User", callback_data="admin_adduser"), types.InlineKeyboardButton("🚫 Ban/Unban", callback_data="admin_ban"))
-        kb.add(types.InlineKeyboardButton("🔍 Search", callback_data="admin_search"), types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-        msg=bot.send_message(chat_id, "👑 ADMIN PANEL ⚙️", reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; try_delete(chat_id, c.message.message_id); return
-    if c.data.startswith("bcast_"):
-        if uid!=OWNER_ID: return
-        hours=int(c.data.split("_")[1]); WAIT_STATE[uid]={"step":"broadcast_target","hours":hours}
-        kb=types.InlineKeyboardMarkup(row_width=2)
-        kb.add(types.InlineKeyboardButton("ALL", callback_data="btarget_ALL"), types.InlineKeyboardButton("NONE", callback_data="btarget_NONE"))
-        kb.add(types.InlineKeyboardButton("STARTER", callback_data="btarget_STARTER"), types.InlineKeyboardButton("PRO", callback_data="btarget_PRO"))
-        kb.add(types.InlineKeyboardButton("VIP", callback_data="btarget_VIP"))
-        bot.send_message(chat_id, f"✅ Delete in {hours}h selected!\n\n📢 Step 2: Select target level:", reply_markup=kb)
-        try_delete(chat_id, c.message.message_id); bot.answer_callback_query(c.id); return
-    if c.data.startswith("btarget_"):
-        if uid!=OWNER_ID: return
-        target=c.data.split("_")[1]; ws=WAIT_STATE.get(uid,{}); hours=ws.get("hours",0); WAIT_STATE[uid]={"step":"broadcast_content","hours":hours,"target":target}
-        bot.send_message(chat_id, f"✅ Target: {target} | Delete: {hours}h\n\n📢 Step 3: Send content now")
-        try_delete(chat_id, c.message.message_id); bot.answer_callback_query(c.id); return
-    if c.data.startswith("admin_"):
-        if uid!=OWNER_ID: return
-        if c.data=="admin_users":
-            last=list(USERS.items())[-20:]; out="👥 LAST 20:\n"
-            for uid_, dat in last: out+=f"{uid_} {dat.get('level')} {dat.get('daily_w',0)}/{dat.get('daily_l',0)}\n"
-            bot.send_message(chat_id, out)
-        elif c.data=="admin_stats":
-            counts={"LOCKED":0,"NONE":0,"STARTER":0,"PRO":0,"VIP":0,"BANNED":0}
-            tw=0; tl=0
-            for dat in USERS.values():
-                lvl=dat.get("level","LOCKED")
-                if lvl in counts: counts[lvl]+=1
-                if dat.get("banned"): counts["BANNED"]+=1
-                tw+=dat.get("total_w",0); tl+=dat.get("total_l",0)
-            gwr=int(tw/(tw+tl)*100) if (tw+tl)>0 else 0
-            bot.send_message(chat_id, f"📊 STATS:\n{counts}\n🌍 Global WR: {tw}W/{tl}L (WR {gwr}%)\nTraders:{len(TRADERS)}")
-        elif c.data=="admin_reset":
-            for dat in USERS.values(): dat["used_today"]=0; dat["daily_w"]=0; dat["daily_l"]=0; dat["streak"]=0; dat["loss_streak"]=0
-            save(); bot.send_message(chat_id, "🔄 Daily Reset Done!")
-        elif c.data=="admin_broadcast":
-            kb=types.InlineKeyboardMarkup(row_width=2)
-            kb.add(types.InlineKeyboardButton("1 Day", callback_data="bcast_24"), types.InlineKeyboardButton("1 Week", callback_data="bcast_168"))
-            kb.add(types.InlineKeyboardButton("1 Month", callback_data="bcast_720"), types.InlineKeyboardButton("3 Months", callback_data="bcast_2160"))
-            kb.add(types.InlineKeyboardButton("6 Months", callback_data="bcast_4320"), types.InlineKeyboardButton("1 Year", callback_data="bcast_8760"))
-            kb.add(types.InlineKeyboardButton("Never", callback_data="bcast_0"))
-            bot.send_message(chat_id, "📢 Step 1: Select auto-delete time:", reply_markup=kb)
-        elif c.data=="admin_adduser":
-            WAIT_STATE[uid]={"step":"admin_adduser"}; bot.send_message(chat_id, "👤 Add User:\nSend `user_id deposit` e.g.\n`123456 50`")
-        elif c.data=="admin_ban":
-            WAIT_STATE[uid]={"step":"admin_ban"}; bot.send_message(chat_id, "🚫 Ban/Unban:\nSend `ban 123456` or `unban 123456`")
-        elif c.data=="admin_search":
-            WAIT_STATE[uid]={"step":"admin_search"}; bot.send_message(chat_id, "🔍 Search:\nSend user_id e.g. `123456`")
-        bot.answer_callback_query(c.id); return6
+            time.sleep(5)
