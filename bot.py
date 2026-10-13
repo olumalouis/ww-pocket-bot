@@ -19,7 +19,7 @@ LOGIN_URL="https://pocketoption.com/en/login"
 TELEGRAM_CHANNEL="https://t.me/wwpocketsignals"
 
 def get_affiliate_link(uid):
-    return f"{AFFILIATE_BASE}&subid={uid}&promo={PROMO_CODE}&code={PROMO_CODE}"
+    return f"{AFFILIATE_BASE}&sub_id1={uid}&promo={PROMO_CODE}&code={PROMO_CODE}"
 
 app=Flask(__name__)
 bot=telebot.TeleBot(BOT_TOKEN, threaded=False)
