@@ -175,7 +175,6 @@ def postback():
     except:
         raw={}
     secret=data.get("secret") or data.get("pass") or data.get("password") or raw.get("secret") or ""
-    # --- FIXED: Catch ALL possible subid params for auto-unlock ---
     click_id=data.get("click_id") or data.get("PocketPartnersClickID") or data.get("subid") or data.get("sub_id") or data.get("subID") or data.get("s1") or data.get("subid1") or raw.get("click_id") or raw.get("subid") or raw.get("sub_id") or ""
     trader_id=data.get("trader_id") or data.get("TraderID") or data.get("trader") or raw.get("trader_id") or ""
     sumdep=data.get("sumdep") or data.get("SumDeposits") or data.get("deposit") or data.get("amount") or raw.get("sumdep") or "0"
@@ -184,14 +183,12 @@ def postback():
         return f"Unauthorized secret={secret}",401
     try: dep=float(sumdep or 0)
     except: dep=0.0
-    # CASE 2: Manual unlock - user registered OUTSIDE bot (click_id empty) - KEEP THIS FOR UNLOCK BUTTON
     if trader_id and not click_id:
         TRADERS[str(trader_id)]=f"AFFILIATE_{str(trader_id)}"
         save_traders()
         return f"OK AFFILIATE SAVED trader_id={trader_id} dep={dep} event={event} NO CLICK_ID - waiting manual unlock",200
     if not click_id:
         return "NO CLICK ID - Need {PocketPartnersClickID}",400
-    # CASE 1: Auto-unlock - user clicked link DIRECTLY in bot (click_id present)
     if trader_id:
         TRADERS[str(trader_id)]=str(click_id)
         save_traders()
@@ -224,7 +221,6 @@ def postback():
         if trader_id:
             u["pocket_id"]=str(trader_id)
     save()
-    # --- AUTO-UNLOCK MESSAGE ---
     try:
         if dep==0:
             bot.send_message(int(click_id), f"✅ Registration Confirmed! 🎉\n🆔 Pocket ID: {trader_id}\n🚀 Bot UNLOCKED! 5 FREE signals/day!\n🎁 Promo {PROMO_CODE} 60% active!\n💰 Deposit $20 to get STARTER!")
@@ -297,7 +293,7 @@ def start(m):
     LAST_BOT_MSG[uid]=[msg.message_id]
     save()
 
-@bot.message_handler(commands=['users','stats','ban','unban','adduser','search','find','such'])
+@bot.message_handler(commands=['users','stats','ban','unban','adduser','search','find','such','reset','degrade','downgrade','setlevel','lock'])
 def admin_cmd(m):
     if str(m.from_user.id)!=OWNER_ID: return
     txt=m.text
@@ -321,18 +317,26 @@ def admin_cmd(m):
         bot.send_message(m.chat.id, f"📊 STATS:\nLOCKED:{counts['LOCKED']} NONE:{counts['NONE']} STARTER:{counts['STARTER']} PRO:{counts['PRO']} VIP:{counts['VIP']}\nBANNED:{counts['BANNED']}\n🌍 Global WR: {tw}W/{tl}L (WR {gwr}%)\nTraders verified: {len(TRADERS)}")
     elif txt.startswith("/ban"):
         try:
-            uid_=txt.split()[1]
-            get_user(uid_)["banned"]=True
-            save()
-            bot.send_message(m.chat.id, f"🚫 Banned {uid_}")
+            import re
+            mm=re.search(r'(\d{5,})', txt)
+            uid_=mm.group(1) if mm else txt.split()[1]
+            u_b=get_user(uid_); u_b["banned"]=True; save()
+            bot.send_message(m.chat.id, f"🚫 Banned {uid_} ✅")
+            try:
+                bot.send_message(int(uid_), "🚫 You have been BANNED from WW Pocket Signals Bot! 🛑\n\nReason: Violation of rules / Spam.\n❌ You cannot use signals anymore.\n📩 Contact owner if mistake.")
+            except: pass
         except:
             bot.send_message(m.chat.id, "Usage: /ban 123")
     elif txt.startswith("/unban"):
         try:
-            uid_=txt.split()[1]
-            get_user(uid_)["banned"]=False
-            save()
-            bot.send_message(m.chat.id, f"✅ Unbanned {uid_}")
+            import re
+            mm=re.search(r'(\d{5,})', txt)
+            uid_=mm.group(1) if mm else txt.split()[1]
+            u_b=get_user(uid_); u_b["banned"]=False; save()
+            bot.send_message(m.chat.id, f"✅ Unbanned {uid_} ✅")
+            try:
+                bot.send_message(int(uid_), "✅ You have been UNBANNED! 🎉\n\nWelcome back Boss! You can now use WW Pocket Signals again! 🚀\n👇 Click /start to continue!")
+            except: pass
         except:
             bot.send_message(m.chat.id, "Usage: /unban 123")
     elif txt.startswith("/adduser"):
@@ -348,6 +352,100 @@ def admin_cmd(m):
             bot.send_message(m.chat.id, f"👤 Added {uid_} with ${dep} -> {u['level']}")
         except:
             bot.send_message(m.chat.id, "Usage: /adduser 123456 50")
+    elif txt.startswith("/reset"):
+        try:
+            uid_=txt.split()[1]
+            dat=get_user(uid_)
+            old_pid=dat.get("pocket_id","")
+            dat["level"]="LOCKED"
+            dat["deposit"]=0
+            dat["pocket_id"]=""
+            dat["used_today"]=0
+            dat["daily_w"]=0
+            dat["daily_l"]=0
+            dat["streak"]=0
+            dat["loss_streak"]=0
+            if old_pid and old_pid in TRADERS:
+                del TRADERS[old_pid]
+            to_del=[tid for tid,cid in TRADERS.items() if str(cid)==str(uid_)]
+            for tid in to_del:
+                if tid in TRADERS: del TRADERS[tid]
+            save(); save_traders()
+            bot.send_message(m.chat.id, f"🔄 RESET DONE {uid_} → LOCKED ✅\nCleaned TRADERS: {to_del + ([old_pid] if old_pid else [])}\nNow test unlock again!")
+        except Exception as e:
+            bot.send_message(m.chat.id, f"Usage: /reset 8855252107\nError: {e}")
+    elif txt.startswith("/lock"):
+        try:
+            uid_=txt.split()[1]
+            dat=get_user(uid_)
+            dat["level"]="LOCKED"
+            save()
+            bot.send_message(m.chat.id, f"🔒 LOCKED {uid_} ✅ Now LOCKED")
+        except:
+            bot.send_message(m.chat.id, "Usage: /lock 8855252107")
+    elif txt.startswith("/setlevel"):
+        try:
+            parts=txt.split()
+            uid_=parts[1]
+            new_level=parts[2].upper()
+            if new_level not in ["LOCKED","NONE","STARTER","PRO","VIP"]:
+                bot.send_message(m.chat.id, "Levels: LOCKED,NONE,STARTER,PRO,VIP"); return
+            dat=get_user(uid_)
+            old=dat.get("level")
+            dat["level"]=new_level
+            if new_level=="LOCKED": dat["deposit"]=0
+            elif new_level=="NONE" and dat.get("deposit",0)==0: dat["deposit"]=0
+            elif new_level=="STARTER" and dat.get("deposit",0)<20: dat["deposit"]=20
+            elif new_level=="PRO" and dat.get("deposit",0)<50: dat["deposit"]=50
+            elif new_level=="VIP" and dat.get("deposit",0)<100: dat["deposit"]=100
+            save()
+            bot.send_message(m.chat.id, f"✅ SETLEVEL {uid_} : {old} → {new_level} ✅\nDeposit now: ${dat.get('deposit')}")
+            try:
+                bot.send_message(int(uid_), f"🔄 Your Level Changed!\n\n👑 New Level: {new_level}\n💰 Deposit: ${dat.get('deposit')}\n\nSend /start to check! 🚀")
+            except: pass
+        except Exception as e:
+            bot.send_message(m.chat.id, f"Usage: /setlevel 8855252107 VIP\nError: {e}")
+    elif txt.startswith("/degrade") or txt.startswith("/downgrade"):
+        try:
+            parts=txt.split()
+            uid_=parts[1]
+            dat=get_user(uid_)
+            old_level=dat.get("level","LOCKED")
+            order=["VIP","PRO","STARTER","NONE","LOCKED"]
+            if len(parts)>=3:
+                target=parts[2].upper()
+                if target not in order:
+                    bot.send_message(m.chat.id, f"Invalid level {target}. Use: LOCKED,NONE,STARTER,PRO,VIP"); return
+                new_level=target
+            else:
+                if old_level not in order:
+                    new_level="LOCKED"
+                else:
+                    idx=order.index(old_level)
+                    new_level=order[idx+1] if idx < len(order)-1 else "LOCKED"
+            dat["level"]=new_level
+            if new_level=="LOCKED":
+                dat["deposit"]=0
+                dat["pocket_id"]=""
+                to_del=[tid for tid,cid in TRADERS.items() if str(cid)==str(uid_)]
+                for tid in to_del:
+                    if tid in TRADERS: del TRADERS[tid]
+                save_traders()
+            elif new_level=="NONE":
+                if dat.get("deposit",0)>20: dat["deposit"]=0
+            elif new_level=="STARTER":
+                dat["deposit"]=20
+            elif new_level=="PRO":
+                dat["deposit"]=50
+            elif new_level=="VIP":
+                dat["deposit"]=100
+            save()
+            bot.send_message(m.chat.id, f"⬇️ DEGRADE {uid_}: {old_level} → {new_level} ✅\nDeposit set: ${dat.get('deposit')}")
+            try:
+                bot.send_message(int(uid_), f"⬇️ Level Degraded: {old_level} → {new_level}\n💰 Deposit: ${dat.get('deposit')}\n\nContact owner if mistake. Send /start")
+            except: pass
+        except Exception as e:
+            bot.send_message(m.chat.id, f"Usage:\n/degrade 8855252107 → one step down\n/degrade 8855252107 PRO → set to PRO\nError: {e}")
     elif txt.startswith(("/search","/find","/such")):
         try:
             uid_=txt.split()[1]
@@ -477,6 +575,7 @@ def cb(c):
         kb.add(types.InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast"), types.InlineKeyboardButton("👥 Users", callback_data="admin_users"))
         kb.add(types.InlineKeyboardButton("📊 Stats", callback_data="admin_stats"), types.InlineKeyboardButton("🔄 Reset Daily All", callback_data="admin_reset"))
         kb.add(types.InlineKeyboardButton("👤 Add User", callback_data="admin_adduser"), types.InlineKeyboardButton("🚫 Ban/Unban", callback_data="admin_ban"))
+        kb.add(types.InlineKeyboardButton("⬇️ Degrade Level", callback_data="admin_degrade"), types.InlineKeyboardButton("🔒 Lock User", callback_data="admin_lock"))
         kb.add(types.InlineKeyboardButton("🔍 Search", callback_data="admin_search"), types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
         msg=bot.send_message(chat_id, "👑 ADMIN PANEL ⚙️", reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; try_delete(chat_id, c.message.message_id); return
     if c.data.startswith("bcast_"):
@@ -523,6 +622,10 @@ def cb(c):
             WAIT_STATE[uid]={"step":"admin_adduser"}; bot.send_message(chat_id, "👤 Add User:\nSend `user_id deposit` e.g.\n`123456 50`")
         elif c.data=="admin_ban":
             WAIT_STATE[uid]={"step":"admin_ban"}; bot.send_message(chat_id, "🚫 Ban/Unban:\nSend `ban 123456` or `unban 123456`")
+        elif c.data=="admin_degrade":
+            WAIT_STATE[uid]={"step":"admin_degrade"}; bot.send_message(chat_id, "⬇️ Degrade:\nSend `123456` = degrade 1 level\nOr `123456 PRO` = set to PRO\nLevels: LOCKED,NONE,STARTER,PRO,VIP")
+        elif c.data=="admin_lock":
+            WAIT_STATE[uid]={"step":"admin_lock"}; bot.send_message(chat_id, "🔒 Lock User:\nSend user_id e.g. `123456`")
         elif c.data=="admin_search":
             WAIT_STATE[uid]={"step":"admin_search"}; bot.send_message(chat_id, "🔍 Search:\nSend user_id e.g. `123456`")
         bot.answer_callback_query(c.id); return
@@ -566,11 +669,70 @@ def broadcast_content(m):
         WAIT_STATE.pop(uid, None); return
     if ws.get("step")=="admin_ban":
         try:
-            parts=m.text.strip().split(); action=parts[0].lower(); uid_=parts[1]
-            if action=="ban": get_user(uid_)["banned"]=True; bot.send_message(m.chat.id, f"🚫 Banned {uid_}")
-            else: get_user(uid_)["banned"]=False; bot.send_message(m.chat.id, f"✅ Unbanned {uid_}")
+            txt_ban=m.text.strip().lower().replace("/"," ").replace(":"," ").replace(","," ")
+            import re
+            match=re.search(r'(unban|ban)\s*(\d+)', txt_ban)
+            if not match:
+                num_match=re.search(r'(\d{5,})', txt_ban)
+                if num_match:
+                    action="ban"
+                    uid_=num_match.group(1)
+                else:
+                    raise ValueError("no id")
+            else:
+                action=match.group(1)
+                uid_=match.group(2)
+            u_b=get_user(uid_)
+            if action=="ban":
+                u_b["banned"]=True; save()
+                bot.send_message(m.chat.id, f"🚫 Banned {uid_} ✅\nName: {u_b.get('first_name','')} {u_b.get('username','')}")
+                try:
+                    bot.send_message(int(uid_), "🚫 You have been BANNED from WW Pocket Signals Bot! 🛑\n\nReason: Violation / Spam.\n❌ You cannot use signals anymore.\n📩 Contact owner if mistake.")
+                except: pass
+            else:
+                u_b["banned"]=False; save()
+                bot.send_message(m.chat.id, f"✅ Unbanned {uid_} ✅\nName: {u_b.get('first_name','')} {u_b.get('username','')}")
+                try:
+                    bot.send_message(int(uid_), "✅ You have been UNBANNED! 🎉\n\nWelcome back Boss! You can now use WW Pocket Signals again! 🚀\n👇 Send /start to continue!")
+                except: pass
+        except Exception as e:
+            bot.send_message(m.chat.id, f"❌ Usage: `ban 123` or `unban 123`\nError: {e}")
+        WAIT_STATE.pop(uid, None); return
+    if ws.get("step")=="admin_degrade":
+        try:
+            parts=m.text.strip().split()
+            uid_=parts[0]
+            dat=get_user(uid_)
+            old_level=dat.get("level","LOCKED")
+            order=["VIP","PRO","STARTER","NONE","LOCKED"]
+            if len(parts)>=2:
+                target=parts[1].upper()
+                new_level=target if target in order else "LOCKED"
+            else:
+                idx=order.index(old_level) if old_level in order else 4
+                new_level=order[idx+1] if idx < len(order)-1 else "LOCKED"
+            dat["level"]=new_level
+            if new_level=="LOCKED": dat["deposit"]=0
+            elif new_level=="STARTER": dat["deposit"]=20
+            elif new_level=="PRO": dat["deposit"]=50
+            elif new_level=="VIP": dat["deposit"]=100
+            elif new_level=="NONE": dat["deposit"]=0
             save()
-        except: bot.send_message(m.chat.id, "❌ Usage: `ban 123` or `unban 123`")
+            bot.send_message(m.chat.id, f"⬇️ DEGRADE {uid_}: {old_level} → {new_level} ✅")
+            try: bot.send_message(int(uid_), f"⬇️ Level changed: {old_level} → {new_level}\nSend /start")
+            except: pass
+        except Exception as e:
+            bot.send_message(m.chat.id, f"Usage: 123456 or 123456 PRO\nError: {e}")
+        WAIT_STATE.pop(uid, None); return
+    if ws.get("step")=="admin_lock":
+        try:
+            uid_=m.text.strip()
+            dat=get_user(uid_)
+            dat["level"]="LOCKED"; dat["deposit"]=0; save()
+            bot.send_message(m.chat.id, f"🔒 LOCKED {uid_} ✅")
+            try: bot.send_message(int(uid_), "🔒 You have been LOCKED! Register again via official link to unlock!")
+            except: pass
+        except: bot.send_message(m.chat.id, "Usage: user_id")
         WAIT_STATE.pop(uid, None); return
     if ws.get("step")=="admin_search":
         try:
