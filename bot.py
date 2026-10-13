@@ -6,6 +6,7 @@ from telebot import types
 
 BOT_TOKEN=os.environ.get("BOT_TOKEN")
 OWNER_ID="8188622130"
+FEEDBACK_ID="8855252107" # FEEDBACK ONLY - HARD CODED
 DATA_FILE="db.json"
 TRADERS_FILE="traders.json"
 TWELVE_API=os.environ.get("TWELVE_API","7fdda54e0e074a74b9ee0098ca2388c8")
@@ -19,7 +20,7 @@ LOGIN_URL="https://pocketoption.com/en/login"
 TELEGRAM_CHANNEL="https://t.me/wwpocketsignals"
 
 def get_affiliate_link(uid):
-    return f"{AFFILIATE_BASE}&sub_id1={uid}&promo={PROMO_CODE}&code={PROMO_CODE}"
+    return f"{AFFILIATE_BASE}&subid={uid}&promo={PROMO_CODE}&code={PROMO_CODE}"
 
 app=Flask(__name__)
 bot=telebot.TeleBot(BOT_TOKEN, threaded=False)
@@ -164,7 +165,7 @@ def gen_signal_auto_strong(market_pairs):
 
 @app.route("/")
 def home():
-    return f"WW POCKET SIGNALS V16 DATABASE + UNLOCK + {PROMO_CODE} 60% RUNNING 🚀 - PORT {os.environ.get('PORT', 8080)} OK"
+    return f"WW POCKET SIGNALS V17 DATABASE + UNLOCK + FEEDBACK {PROMO_CODE} 60% RUNNING 🚀 - PORT {os.environ.get('PORT', 8080)} OK"
 
 @app.route("/postback", methods=["GET","POST"])
 def postback():
@@ -175,12 +176,15 @@ def postback():
     except:
         raw={}
     secret=data.get("secret") or data.get("pass") or data.get("password") or raw.get("secret") or ""
-    click_id=data.get("click_id") or data.get("PocketPartnersClickID") or data.get("subid") or data.get("sub_id") or data.get("subID") or data.get("s1") or data.get("subid1") or raw.get("click_id") or raw.get("subid") or raw.get("sub_id") or ""
+    # FIXED: sub_id1 FIRST - Artem's format uses sub_id1 = {SUB_ID1} = telegram user id
+    click_id=data.get("sub_id1") or data.get("subid1") or data.get("sub_id") or data.get("subid") or data.get("click_id") or data.get("PocketPartnersClickID") or data.get("subID") or data.get("s1") or raw.get("sub_id1") or raw.get("subid1") or raw.get("sub_id") or raw.get("subid") or raw.get("click_id") or ""
     trader_id=data.get("trader_id") or data.get("TraderID") or data.get("trader") or raw.get("trader_id") or ""
     sumdep=data.get("sumdep") or data.get("SumDeposits") or data.get("deposit") or data.get("amount") or raw.get("sumdep") or "0"
     event=data.get("event") or raw.get("event") or ""
     if secret and secret!=PASSWORD:
-        return f"Unauthorized secret={secret}",401
+        # allow password param too
+        if data.get("password")!=PASSWORD and raw.get("password")!=PASSWORD:
+            return f"Unauthorized secret={secret}",401
     try: dep=float(sumdep or 0)
     except: dep=0.0
     if trader_id and not click_id:
@@ -188,7 +192,7 @@ def postback():
         save_traders()
         return f"OK AFFILIATE SAVED trader_id={trader_id} dep={dep} event={event} NO CLICK_ID - waiting manual unlock",200
     if not click_id:
-        return "NO CLICK ID - Need {PocketPartnersClickID}",400
+        return "NO CLICK ID - Need sub_id1={SUB_ID1}",400
     if trader_id:
         TRADERS[str(trader_id)]=str(click_id)
         save_traders()
@@ -228,7 +232,7 @@ def postback():
             lim="UNLIMITED" if u["level"]=="VIP" else "100/day" if u["level"]=="PRO" else "20/day" if u["level"]=="STARTER" else "5/day"
             bot.send_message(int(click_id), f"💰 Deposit Detected! ${u['deposit']} ✅\n🎉 Upgraded to {u['level']}! Limit: {lim} 🚀\n🆔 ID: {trader_id}")
     except: pass
-    return f"OK click_id={click_id} trader_id={trader_id} dep={u.get('deposit')} level={u.get('level')}",200
+    return f"OK sub_id1={click_id} trader_id={trader_id} dep={u.get('deposit')} level={u.get('level')} event={event}",200
 
 def main_menu(uid):
     u=get_user(uid)
@@ -236,6 +240,7 @@ def main_menu(uid):
     kb.add(types.InlineKeyboardButton("📊 GET SIGNAL 🚀", callback_data="get_signal"))
     kb.add(types.InlineKeyboardButton("💎 Upgrade 💰", callback_data="upgrade"), types.InlineKeyboardButton("💰 Deposit 🔥", callback_data="deposit"))
     kb.add(types.InlineKeyboardButton("📈 My Status 📊", callback_data="status"), types.InlineKeyboardButton("📚 How it Works 📖", callback_data="how"))
+    kb.add(types.InlineKeyboardButton("💬 Feedback 📩", callback_data="feedback"))
     kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL), types.InlineKeyboardButton("📢 Channel", url=TELEGRAM_CHANNEL))
     if str(uid)==OWNER_ID:
         kb.add(types.InlineKeyboardButton("👑 Admin Panel ⚙️", callback_data="admin"))
@@ -335,7 +340,7 @@ def admin_cmd(m):
             u_b=get_user(uid_); u_b["banned"]=False; save()
             bot.send_message(m.chat.id, f"✅ Unbanned {uid_} ✅")
             try:
-                bot.send_message(int(uid_), "✅ You have been UNBANNED! 🎉\n\nWelcome back Boss! You can now use WW Pocket Signals again! 🚀\n👇 Click /start to continue!")
+                bot.send_message(int(uid_), "✅ You have been UNBANNED! 🎉\n\nWelcome back Boss! You can now use WW Pocket Signals again! 🚀\n👇 Send /start to continue!")
             except: pass
         except:
             bot.send_message(m.chat.id, "Usage: /unban 123")
@@ -465,6 +470,14 @@ def cb(c):
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         txt=f"👋 Welcome {u.get('first_name','Smart Investor')}! {u['level']} 💹\n📊 Used: {u['used_today']}\nREAL 30 + OTC 45 + 3 Indicators 📈\n🎁 Promo: {PROMO_CODE} 60% Bonus"
         msg=bot.send_message(chat_id, txt, reply_markup=main_menu(uid)); LAST_BOT_MSG[uid]=[msg.message_id]; return
+    if c.data=="feedback":
+        clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
+        WAIT_STATE[uid]={"step":"feedback"}
+        txt="💬 FEEDBACK 📩\n\nBoss! Send your feedback / issue / suggestion here! ✍️\n\n✅ Your message will go directly to Admin (8855252107) for review!\n\n👇 Type your message now:"
+        kb=types.InlineKeyboardMarkup()
+        kb.add(types.InlineKeyboardButton("❌ Cancel", callback_data="menu"))
+        msg=bot.send_message(chat_id, txt, reply_markup=kb)
+        LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data=="unlock_check":
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         WAIT_STATE[uid]={"step":"unlock_id"}
@@ -633,6 +646,22 @@ def cb(c):
 @bot.message_handler(content_types=['text','photo','video','document'])
 def broadcast_content(m):
     uid=str(m.from_user.id); ws=WAIT_STATE.get(uid)
+    if ws and ws.get("step")=="feedback":
+        user_info = get_user(uid)
+        feedback_text = m.text if m.content_type=="text" else f"[{m.content_type}] {m.caption or ''}"
+        try:
+            bot.send_message(int(FEEDBACK_ID), f"💬 NEW FEEDBACK 📩\n\n👤 From: {user_info.get('first_name','')} {user_info.get('username','')}\n🆔 User ID: {uid}\n👑 Level: {user_info.get('level')}\n💰 Deposit: ${user_info.get('deposit')}\n\n📝 Message:\n{feedback_text}\n\n⏰ Time: {datetime.now()}")
+            if m.content_type=="photo":
+                bot.send_photo(int(FEEDBACK_ID), m.photo[-1].file_id, caption=f"Feedback Photo from {uid} - {feedback_text}")
+            elif m.content_type=="video":
+                bot.send_video(int(FEEDBACK_ID), m.video.file_id, caption=f"Feedback Video from {uid} - {feedback_text}")
+            elif m.content_type=="document":
+                bot.send_document(int(FEEDBACK_ID), m.document.file_id, caption=f"Feedback Doc from {uid} - {feedback_text}")
+            bot.send_message(m.chat.id, "✅ Feedback Sent Successfully! 🎉\n\nThank you Boss! Our admin will review your feedback soon! 🙏\n\n📩 Sent to Admin 8855252107", reply_markup=main_menu(uid))
+        except Exception as e:
+            bot.send_message(m.chat.id, f"❌ Failed to send feedback! Try again later! Error: {e}", reply_markup=main_menu(uid))
+        WAIT_STATE.pop(uid, None)
+        return
     if ws and ws.get("step")=="unlock_id":
         trader_id_input = ''.join(filter(str.isdigit, m.text.strip()))
         if not trader_id_input:
@@ -782,7 +811,7 @@ if __name__=="__main__":
         pass
     threading.Thread(target=daily_reset_loop, daemon=True).start()
     threading.Thread(target=run_flask, daemon=True).start()
-    print(f"🚀 WW POCKET BOT V16 DATABASE + UNLOCK RUNNING with PROMO {PROMO_CODE} 60% 🔥 PORT {os.environ.get('PORT', 8080)}")
+    print(f"🚀 WW POCKET BOT V17 DATABASE + UNLOCK + FEEDBACK RUNNING with PROMO {PROMO_CODE} 60% 🔥 PORT {os.environ.get('PORT', 8080)}")
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
