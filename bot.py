@@ -6,8 +6,8 @@ from telebot import types
 
 BOT_TOKEN=os.environ.get("BOT_TOKEN")
 OWNER_ID="8188622130"
-FEEDBACK_ID="8855252107" # FEEDBACK ONLY - HARD CODED
-FEEDBACK_URL="https://t.me/Wwpocketsignalsfeedback" # DIRECT FEEDBACK ACCOUNT
+FEEDBACK_ID="8855252107"
+FEEDBACK_URL="https://t.me/Wwpocketsignalsfeedback"
 DATA_FILE="db.json"
 TRADERS_FILE="traders.json"
 TWELVE_API=os.environ.get("TWELVE_API","7fdda54e0e074a74b9ee0098ca2388c8")
@@ -20,8 +20,9 @@ DEPOSIT_DIRECT="https://pocketoption.com/en/cabinet/deposit-step/1/"
 LOGIN_URL="https://pocketoption.com/en/login"
 TELEGRAM_CHANNEL="https://t.me/wwpocketsignals"
 
+# ✅ FINAL: ONLY click_id = Telegram ID - CLEAN!
 def get_affiliate_link(uid):
-    return f"{AFFILIATE_BASE}&subid={uid}&promo={PROMO_CODE}&code={PROMO_CODE}"
+    return f"{AFFILIATE_BASE}&click_id={uid}"
 
 app=Flask(__name__)
 bot=telebot.TeleBot(BOT_TOKEN, threaded=False)
@@ -177,7 +178,8 @@ def postback():
     except:
         raw={}
     secret=data.get("secret") or data.get("pass") or data.get("password") or raw.get("secret") or ""
-    click_id=data.get("sub_id1") or data.get("subid1") or data.get("sub_id") or data.get("subid") or data.get("click_id") or data.get("PocketPartnersClickID") or data.get("subID") or data.get("s1") or raw.get("sub_id1") or raw.get("subid1") or raw.get("sub_id") or raw.get("subid") or raw.get("click_id") or ""
+    # ✅ FINAL: ONLY click_id priority, but accept old params as backup
+    click_id=data.get("click_id") or data.get("sub_id1") or data.get("subid") or data.get("sub_id") or raw.get("click_id") or raw.get("sub_id1") or raw.get("subid") or ""
     trader_id=data.get("trader_id") or data.get("TraderID") or data.get("trader") or raw.get("trader_id") or ""
     sumdep=data.get("sumdep") or data.get("SumDeposits") or data.get("deposit") or data.get("amount") or raw.get("sumdep") or "0"
     event=data.get("event") or raw.get("event") or ""
@@ -186,17 +188,26 @@ def postback():
             return f"Unauthorized secret={secret}",401
     try: dep=float(sumdep or 0)
     except: dep=0.0
+
+    # ✅ AUTO UPGRADE FIX: If click_id empty but trader_id already mapped (manual unlock used), lookup!
+    if not click_id and trader_id:
+        tid=str(trader_id)
+        if tid in TRADERS:
+            click_id=TRADERS[tid] # Found Telegram ID from manual unlock!
+            print(f"🔄 FOUND via TRADERS mapping: trader_id={tid} -> click_id={click_id}")
+
     if trader_id and not click_id:
         TRADERS[str(trader_id)]=f"AFFILIATE_{str(trader_id)}"
         save_traders()
         return f"OK AFFILIATE SAVED trader_id={trader_id} dep={dep} event={event} NO CLICK_ID",200
     if not click_id:
-        return "NO CLICK ID - Need sub_id1={SUB_ID1}",400
+        return "NO CLICK ID - Need click_id={CLICK_ID}",400
     if trader_id:
         TRADERS[str(trader_id)]=str(click_id)
         save_traders()
     u=get_user(str(click_id))
     old_dep=float(u.get("deposit",0) or 0)
+    # Auto Unlock
     if u.get("level","LOCKED")=="LOCKED":
         if trader_id or event=="reg" or dep==0:
             u["level"]="NONE"
@@ -210,6 +221,7 @@ def postback():
                 u["level"]="NONE"
             if trader_id:
                 u["pocket_id"]=str(trader_id)
+    # ✅ Auto Upgrade even if unlocked via button
     if dep>0:
         total_dep=max(old_dep, dep)
         if old_dep>0 and dep>old_dep:
@@ -231,7 +243,7 @@ def postback():
             lim="UNLIMITED" if u["level"]=="VIP" else "100/day" if u["level"]=="PRO" else "20/day" if u["level"]=="STARTER" else "5/day"
             bot.send_message(int(click_id), f"💰 Deposit Detected! ${u['deposit']} ✅\n🎉 Upgraded to {u['level']}! Limit: {lim} 🚀\n🆔 ID: {trader_id}")
     except: pass
-    return f"OK sub_id1={click_id} trader_id={trader_id} dep={u.get('deposit')} level={u.get('level')} event={event}",200
+    return f"OK click_id={click_id} trader_id={trader_id} dep={u.get('deposit')} level={u.get('level')} event={event}",200
 
 def main_menu(uid):
     u=get_user(uid)
@@ -651,22 +663,23 @@ def broadcast_content(m):
         if not trader_id_input:
             bot.send_message(m.chat.id, "❌ Invalid ID! Send numbers only e.g. 12345678")
             return
+        # ✅ Check if verified in TRADERS (from postback)
         if trader_id_input in TRADERS:
             u = get_user(uid)
             u["level"]="NONE"
             u["pocket_id"]=trader_id_input
             if u.get("deposit",0)==0: u["deposit"]=0
-            TRADERS[trader_id_input]=uid
+            TRADERS[trader_id_input]=uid # ✅ Ensure mapping = Telegram ID for future deposits!
             save(); save_traders()
             kb=types.InlineKeyboardMarkup(row_width=1)
             kb.add(types.InlineKeyboardButton("📊 Get Signals 🚀", callback_data="get_signal"))
             kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
-            bot.send_message(m.chat.id, f"✅ VERIFIED! You ARE under my affiliate link! 🎉\n🆔 Pocket ID: {trader_id_input}\n🚀 Bot UNLOCKED! 5 FREE signals/day!\n💰 Deposit $20 for STARTER 20/day!\n🎁 Promo {PROMO_CODE} 60% active!\n\nNow click GET SIGNAL!", reply_markup=kb)
+            bot.send_message(m.chat.id, f"✅ VERIFIED! You ARE under my affiliate link! 🎉\n🆔 Pocket ID: {trader_id_input}\n🚀 Bot UNLOCKED! 5 FREE signals/day!\n💰 Deposit $20 for STARTER 20/day!\n🎁 Promo {PROMO_CODE} 60% active!\n\nNow click GET SIGNAL! And your future deposits will AUTO-UPGRADE! 🔥", reply_markup=kb)
         else:
             kb=types.InlineKeyboardMarkup(row_width=1)
             kb.add(types.InlineKeyboardButton(f"🔗 Register Now + {PROMO_CODE} 60% 🎁", url=get_affiliate_link(uid)))
             kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
-            bot.send_message(m.chat.id, f"❌ ID {trader_id_input} NOT found under my affiliate link! 🔒\n\nPocket didn't send us your ID yet!\n\nPossible reasons:\n1️⃣ You didn't use MY link to register\n2️⃣ You didn't use promo {PROMO_CODE}\n3️⃣ Postback delayed (wait 2-3 mins)\n\n👇 Click below to register with 60% Bonus!\n🎁 Promo Code: {PROMO_CODE} auto-applied!", reply_markup=kb)
+            bot.send_message(m.chat.id, f"❌ ID {trader_id_input} NOT found under my affiliate link! 🔒\n\nPocket didn't send us your ID yet!\n\nPossible reasons:\n1️⃣ You didn't use MY link to register\n2️⃣ You didn't use promo {PROMO_CODE}\n3️⃣ Postback delayed (wait 2-3 mins then try again!)\n\n👇 Click below to register with 60% Bonus!\n🎁 Promo Code: {PROMO_CODE} auto-applied!", reply_markup=kb)
         WAIT_STATE.pop(uid, None)
         return
     if not ws or uid!=OWNER_ID: return
@@ -795,7 +808,7 @@ if __name__=="__main__":
         pass
     threading.Thread(target=daily_reset_loop, daemon=True).start()
     threading.Thread(target=run_flask, daemon=True).start()
-    print(f"🚀 WW POCKET BOT V17 DATABASE + UNLOCK + FEEDBACK RUNNING with PROMO {PROMO_CODE} 60% 🔥 PORT {os.environ.get('PORT', 8080)}")
+    print(f"🚀 WW POCKET BOT V17 FINAL click_id ONLY + AUTO UPGRADE AFTER UNLOCK RUNNING PROMO {PROMO_CODE} 60% 🔥 PORT {os.environ.get('PORT', 8080)}")
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
