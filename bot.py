@@ -175,7 +175,8 @@ def postback():
     except:
         raw={}
     secret=data.get("secret") or data.get("pass") or data.get("password") or raw.get("secret") or ""
-    click_id=data.get("click_id") or data.get("PocketPartnersClickID") or data.get("subid") or data.get("sub_id") or raw.get("click_id") or raw.get("subid") or ""
+    # --- FIXED: Catch ALL possible subid params for auto-unlock ---
+    click_id=data.get("click_id") or data.get("PocketPartnersClickID") or data.get("subid") or data.get("sub_id") or data.get("subID") or data.get("s1") or data.get("subid1") or raw.get("click_id") or raw.get("subid") or raw.get("sub_id") or ""
     trader_id=data.get("trader_id") or data.get("TraderID") or data.get("trader") or raw.get("trader_id") or ""
     sumdep=data.get("sumdep") or data.get("SumDeposits") or data.get("deposit") or data.get("amount") or raw.get("sumdep") or "0"
     event=data.get("event") or raw.get("event") or ""
@@ -183,12 +184,14 @@ def postback():
         return f"Unauthorized secret={secret}",401
     try: dep=float(sumdep or 0)
     except: dep=0.0
+    # CASE 2: Manual unlock - user registered OUTSIDE bot (click_id empty) - KEEP THIS FOR UNLOCK BUTTON
     if trader_id and not click_id:
         TRADERS[str(trader_id)]=f"AFFILIATE_{str(trader_id)}"
         save_traders()
-        return f"OK AFFILIATE SAVED trader_id={trader_id} dep={dep} event={event} NO CLICK_ID",200
+        return f"OK AFFILIATE SAVED trader_id={trader_id} dep={dep} event={event} NO CLICK_ID - waiting manual unlock",200
     if not click_id:
         return "NO CLICK ID - Need {PocketPartnersClickID}",400
+    # CASE 1: Auto-unlock - user clicked link DIRECTLY in bot (click_id present)
     if trader_id:
         TRADERS[str(trader_id)]=str(click_id)
         save_traders()
@@ -221,6 +224,7 @@ def postback():
         if trader_id:
             u["pocket_id"]=str(trader_id)
     save()
+    # --- AUTO-UNLOCK MESSAGE ---
     try:
         if dep==0:
             bot.send_message(int(click_id), f"✅ Registration Confirmed! 🎉\n🆔 Pocket ID: {trader_id}\n🚀 Bot UNLOCKED! 5 FREE signals/day!\n🎁 Promo {PROMO_CODE} 60% active!\n💰 Deposit $20 to get STARTER!")
