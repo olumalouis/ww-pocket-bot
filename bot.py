@@ -14,7 +14,7 @@ TWELVE_API=os.environ.get("TWELVE_API","7fdda54e0e074a74b9ee0098ca2388c8")
 STRICT_MODE=os.environ.get("STRICT_MODE","true").lower()=="true"
 DATABASE_URL=os.environ.get("DATABASE_URL")
 
-AFFILIATE_BASE="https://u3.shortink.io/register?utm_campaign=868502&utm_source=affiliate&utm_medium=sr&a=jnLBWcb8IEyL7T&al=1801402&ac=wwpocket100&cid=984351"
+AFFILIATE_BASE="https://u3.shortink.io/register?utm_campaign=868502&utm_source=affiliate&utm_medium=sr&a=jnLBWcb8IEyL7T&al=1801402&ac=wwpocket100&code=KVF341&cid=984351"
 PROMO_CODE="KVF341"
 DEPOSIT_DIRECT="https://pocketoption.com/en/cabinet/deposit-step/1/"
 LOGIN_URL="https://pocketoption.com/en/login"
