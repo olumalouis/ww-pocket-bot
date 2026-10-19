@@ -71,42 +71,44 @@ def get_affiliate_link(uid):
     return f"{AFFILIATE_BASE}&click_id={uid}"
 
 # === NEW: BIG BUY/SELL POSTER GENERATOR (PIL) ===
+SELL_TEMPLATE = "sell_poster.jpg"
+BUY_TEMPLATE = "buy_poster.jpg"
+
 def generate_signal_poster(pair, direction, price, strength, expiry, accuracy, market_name, level):
     try:
-        W, H = 1024, 600
+        from PIL import Image, ImageDraw, ImageFont
+        from io import BytesIO
+        import os
         is_buy = "BUY" in direction.upper()
-        bg_top = (0, 180, 80) if is_buy else (200, 30, 50)
-        bg_bottom = (0, 100, 40) if is_buy else (120, 10, 20)
-        img = Image.new("RGB", (W, H), bg_top)
-        draw = ImageDraw.Draw(img)
-        for y in range(H):
-            r = int(bg_top[0] + (bg_bottom[0]-bg_top[0])*y/H)
-            g = int(bg_top[1] + (bg_bottom[1]-bg_top[1])*y/H)
-            b = int(bg_top[2] + (bg_bottom[2]-bg_top[2])*y/H)
-            draw.line([(0,y),(W,y)], fill=(r,g,b))
+        template_path = BUY_TEMPLATE if is_buy else SELL_TEMPLATE
+        
+        if os.path.exists(template_path):
+            base = Image.open(template_path).convert("RGB").resize((1024, 650))
+        else:
+            base = Image.new("RGB", (1024, 650), (10,10,15))
+        
+        draw = ImageDraw.Draw(base, "RGBA")
+        W, H = 1024, 650
+        
         try:
-            font_big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 110)
-            font_med = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 42)
-            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
+            font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 38)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
+            font_tiny = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22)
         except:
-            font_big = ImageFont.load_default()
-            font_med = ImageFont.load_default()
+            font_bold = ImageFont.load_default()
             font_small = ImageFont.load_default()
-        draw.rectangle([0,0,W,90], fill=(20,20,20))
-        draw.text((30,20), f"WW POCKET SIGNALS | {market_name} | {level}", font=font_small, fill=(255,255,255))
-        dir_text = "BUY" if is_buy else "SELL"
-        draw.text((50, 110), dir_text, font=font_big, fill=(255,255,255))
-        draw.text((50, 250), f"{pair}", font=font_med, fill=(255,255,200))
-        draw.rectangle([50, 320, 550, 410], fill=(255,255,255))
-        draw.text((70, 330), f"Price: {price}", font=font_med, fill=(0,0,0))
-        draw.text((600, 130), f"EXPIRY: {expiry}", font=font_med, fill=(255,255,255))
-        draw.text((600, 190), f"ACC: {accuracy}", font=font_med, fill=(255,255,200))
-        draw.text((600, 250), f"{strength[:32]}", font=font_small, fill=(255,255,255))
-        draw.text((600, 290), f"Promo: {PROMO_CODE} 60%", font=font_small, fill=(255,255,150))
-        draw.text((30, 540), f"Trade on Pocket Option | Valid 1-2 min | {datetime.utcnow().strftime('%H:%M UTC')}", font=font_small, fill=(220,220,220))
+            font_tiny = ImageFont.load_default()
+
+        # Bottom bar for live data - NO WHITE BOX!
+        draw.rectangle([0, H-180, W, H], fill=(0,0,0,190))
+        
+        draw.text((25, H-160), f"💱 {pair}  |  💹 {price}  |  ⏰ {expiry}  |  🎯 {accuracy}", font=font_bold, fill=(255,255,255))
+        draw.text((25, H-115), f"{market_name} | {strength[:40]} | Level: {level}", font=font_small, fill=(220,220,220))
+        draw.text((25, H-75), f"⚡ Valid 1-2 min | Promo {PROMO_CODE} 60% | {datetime.utcnow().strftime('%H:%M UTC')}", font=font_tiny, fill=(180,180,180))
+        
         bio = BytesIO()
         bio.name = "signal.jpg"
-        img.save(bio, "JPEG", quality=90)
+        base.save(bio, "JPEG", quality=90)
         bio.seek(0)
         return bio
     except Exception as e:
