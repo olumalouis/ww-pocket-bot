@@ -52,7 +52,6 @@ def save_settings():
         with open(SETTINGS_FILE,"w") as f: json.dump(SETTINGS,f)
     except: pass
 SETTINGS=load_settings()
-# AUTO-ADD missing buttons (fixes CHANNEL not showing on server)
 for k,v in DEFAULT_SETTINGS["buttons"].items():
     if k not in SETTINGS.get("buttons",{}):
         SETTINGS["buttons"][k]=v
@@ -70,49 +69,55 @@ def get_maintenance_msg():
 def get_affiliate_link(uid):
     return f"{AFFILIATE_BASE}&click_id={uid}"
 
-# === NEW: BIG BUY/SELL POSTER GENERATOR (PIL) ===
-SELL_TEMPLATE = "sell_poster.jpg"
-BUY_TEMPLATE = "buy_poster.jpg"
-
+# === FIXED POSTER - USE FILENAME DIRECTLY + KEEP DETAILS ===
 def generate_signal_poster(pair, direction, price, strength, expiry, accuracy, market_name, level):
     try:
-        from PIL import Image, ImageDraw, ImageFont
-        from io import BytesIO
-        import os
-        is_buy = "BUY" in direction.upper()
-        template_path = BUY_TEMPLATE if is_buy else SELL_TEMPLATE
-        
-        if os.path.exists(template_path):
-            base = Image.open(template_path).convert("RGB").resize((1024, 650))
-        else:
-            base = Image.new("RGB", (1024, 650), (10,10,15))
-        
-        draw = ImageDraw.Draw(base, "RGBA")
         W, H = 1024, 650
+        is_buy = "BUY" in direction.upper()
         
+        # USE YOUR FILES DIRECTLY - EXACT NAMES!
+        if is_buy:
+            possible = ["buy.jpg", "buy_poster.jpg", "BUY.jpg", "buy.jpeg"]
+        else:
+            possible = ["sell.jpg", "sell_poster.jpg", "SELL.jpg", "sell.jpeg"]
+        
+        template_path = None
+        for name in possible:
+            if os.path.exists(name):
+                template_path = name
+                break
+        
+        if template_path:
+            base = Image.open(template_path).convert("RGB").resize((W, H))
+        else:
+            # Fallback if file missing - dark not black
+            base = Image.new("RGB", (W, H), (20,20,25))
+            print(f"FILES NOT FOUND! Tried {possible}, exists: {os.listdir('.')}")
+
+        draw = ImageDraw.Draw(base, "RGBA")
         try:
-            font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 38)
-            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
-            font_tiny = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22)
+            font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+            font_med = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
         except:
             font_bold = ImageFont.load_default()
+            font_med = ImageFont.load_default()
             font_small = ImageFont.load_default()
-            font_tiny = ImageFont.load_default()
 
-        # Bottom bar for live data - NO WHITE BOX!
-        draw.rectangle([0, H-180, W, H], fill=(0,0,0,190))
-        
-        draw.text((25, H-160), f"💱 {pair}  |  💹 {price}  |  ⏰ {expiry}  |  🎯 {accuracy}", font=font_bold, fill=(255,255,255))
-        draw.text((25, H-115), f"{market_name} | {strength[:40]} | Level: {level}", font=font_small, fill=(220,220,220))
-        draw.text((25, H-75), f"⚡ Valid 1-2 min | Promo {PROMO_CODE} 60% | {datetime.utcnow().strftime('%H:%M UTC')}", font=font_tiny, fill=(180,180,180))
+        # Bottom bar - KEEP ALL YOUR SIGNAL DETAILS!
+        draw.rectangle([0, H-170, W, H], fill=(0,0,0,185))
+        draw.text((20, H-150), f"{pair} | {price} | {expiry} | {accuracy}", font=font_bold, fill=(255,255,255))
+        draw.text((20, H-110), f"{market_name} | {strength[:38]} | {level}", font=font_med, fill=(230,230,230))
+        draw.text((20, H-70), f"Valid 1-2min | Promo {PROMO_CODE} 60% | {datetime.utcnow().strftime('%H:%M UTC')}", font=font_small, fill=(200,200,200))
         
         bio = BytesIO()
         bio.name = "signal.jpg"
-        base.save(bio, "JPEG", quality=90)
+        base.save(bio, "JPEG", quality=92)
         bio.seek(0)
         return bio
     except Exception as e:
         print(f"Poster error {e}")
+        import traceback; traceback.print_exc()
         return None
 
 app=Flask(__name__)
@@ -247,6 +252,7 @@ def gen_signal_auto_strong(market_pairs):
         direction, strength, rsi_sig, ema_sig, stoch_sig, conf=check_3_indicators_logic(rsi, price, ema200, stoch)
         if "STRONG TRIPLE" in strength: expiry=random.choice(["M1","M2","M3","M5"]); return pair, direction, strength, rsi, ema_sig, stoch, price, conf, expiry
     pair=random.choice(market_pairs); return gen_signal_manual(pair)
+
 
 @app.route("/")
 def home():
