@@ -515,7 +515,7 @@ def admin_cmd(m):
         except:
             bot.send_message(m.chat.id, "Usage: /search 123")
 
-    @bot.callback_query_handler(func=lambda c: True)
+@bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     uid=str(c.from_user.id); u=get_user(uid); chat_id=c.message.chat.id
     if u.get("banned") and uid!=OWNER_ID:
