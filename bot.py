@@ -678,7 +678,7 @@ def cb(c):
         else:
             msg=bot.send_message(chat_id, txt, reply_markup=kb)
         LAST_BOT_MSG[uid]=[msg.message_id]; return
-        if c.data.startswith("win_") or c.data.startswith("loss_"):
+    if c.data.startswith("win_") or c.data.startswith("loss_"):
         is_win=c.data.startswith("win_"); clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         if is_win:
             u["daily_w"]+=1;u["total_w"]+=1;u["streak"]+=1;u["loss_streak"]=0
