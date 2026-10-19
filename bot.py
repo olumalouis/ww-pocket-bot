@@ -3,6 +3,8 @@ from datetime import datetime
 from flask import Flask, request
 import telebot
 from telebot import types
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
 
 BOT_TOKEN=os.environ.get("BOT_TOKEN")
 OWNER_ID="8188622130"
@@ -20,7 +22,6 @@ DEPOSIT_DIRECT="https://pocketoption.com/en/cabinet/deposit-step/1/"
 LOGIN_URL="https://pocketoption.com/en/login"
 TELEGRAM_CHANNEL="https://t.me/wwpocketsignals"
 
-# ✅ NEW: BUTTON CONTROLLER + PROMO MANAGER - ADDED WITHOUT TOUCHING OLD CODE
 SETTINGS_FILE="settings.json"
 DEFAULT_SETTINGS={
     "buttons": {
@@ -31,7 +32,11 @@ DEFAULT_SETTINGS={
         "how": True,
         "market": True,
         "mode": True,
-        "pairs": True
+        "pairs": True,
+        "channel": True,
+        "login": True,
+        "feedback": True,
+        "deposit_direct": True
     },
     "promo_code": "KVF341",
     "maintenance_msg": "🚧 This feature is under maintenance, resuming soon boss. Please check back in a few hours. 🔧"
@@ -47,30 +52,78 @@ def save_settings():
         with open(SETTINGS_FILE,"w") as f: json.dump(SETTINGS,f)
     except: pass
 SETTINGS=load_settings()
-PROMO_CODE=SETTINGS.get("promo_code","KVF341") # Dynamic promo from admin panel
+# AUTO-ADD missing buttons (fixes CHANNEL not showing on server)
+for k,v in DEFAULT_SETTINGS["buttons"].items():
+    if k not in SETTINGS.get("buttons",{}):
+        SETTINGS["buttons"][k]=v
+if "promo_code" not in SETTINGS:
+    SETTINGS["promo_code"]=DEFAULT_SETTINGS["promo_code"]
+if "maintenance_msg" not in SETTINGS:
+    SETTINGS["maintenance_msg"]=DEFAULT_SETTINGS["maintenance_msg"]
+save_settings()
+PROMO_CODE=SETTINGS.get("promo_code","KVF341")
 
 def is_button_active(btn_key):
     return SETTINGS.get("buttons",{}).get(btn_key, True)
 def get_maintenance_msg():
     return SETTINGS.get("maintenance_msg","🚧 This feature is under maintenance, resuming soon boss. 🔧")
-
-# ✅ FINAL: ONLY click_id = Telegram ID - CLEAN!
 def get_affiliate_link(uid):
     return f"{AFFILIATE_BASE}&click_id={uid}"
+
+# === NEW: BIG BUY/SELL POSTER GENERATOR (PIL) ===
+def generate_signal_poster(pair, direction, price, strength, expiry, accuracy, market_name, level):
+    try:
+        W, H = 1024, 600
+        is_buy = "BUY" in direction.upper()
+        bg_top = (0, 180, 80) if is_buy else (200, 30, 50)
+        bg_bottom = (0, 100, 40) if is_buy else (120, 10, 20)
+        img = Image.new("RGB", (W, H), bg_top)
+        draw = ImageDraw.Draw(img)
+        for y in range(H):
+            r = int(bg_top[0] + (bg_bottom[0]-bg_top[0])*y/H)
+            g = int(bg_top[1] + (bg_bottom[1]-bg_top[1])*y/H)
+            b = int(bg_top[2] + (bg_bottom[2]-bg_top[2])*y/H)
+            draw.line([(0,y),(W,y)], fill=(r,g,b))
+        try:
+            font_big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 110)
+            font_med = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 42)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
+        except:
+            font_big = ImageFont.load_default()
+            font_med = ImageFont.load_default()
+            font_small = ImageFont.load_default()
+        draw.rectangle([0,0,W,90], fill=(20,20,20))
+        draw.text((30,20), f"WW POCKET SIGNALS | {market_name} | {level}", font=font_small, fill=(255,255,255))
+        dir_text = "BUY" if is_buy else "SELL"
+        draw.text((50, 110), dir_text, font=font_big, fill=(255,255,255))
+        draw.text((50, 250), f"{pair}", font=font_med, fill=(255,255,200))
+        draw.rectangle([50, 320, 550, 410], fill=(255,255,255))
+        draw.text((70, 330), f"Price: {price}", font=font_med, fill=(0,0,0))
+        draw.text((600, 130), f"EXPIRY: {expiry}", font=font_med, fill=(255,255,255))
+        draw.text((600, 190), f"ACC: {accuracy}", font=font_med, fill=(255,255,200))
+        draw.text((600, 250), f"{strength[:32]}", font=font_small, fill=(255,255,255))
+        draw.text((600, 290), f"Promo: {PROMO_CODE} 60%", font=font_small, fill=(255,255,150))
+        draw.text((30, 540), f"Trade on Pocket Option | Valid 1-2 min | {datetime.utcnow().strftime('%H:%M UTC')}", font=font_small, fill=(220,220,220))
+        bio = BytesIO()
+        bio.name = "signal.jpg"
+        img.save(bio, "JPEG", quality=90)
+        bio.seek(0)
+        return bio
+    except Exception as e:
+        print(f"Poster error {e}")
+        return None
 
 app=Flask(__name__)
 bot=telebot.TeleBot(BOT_TOKEN, threaded=False)
 
 def get_conn():
     return psycopg2.connect(DATABASE_URL, sslmode='require') if DATABASE_URL else None
-
 def init_db():
     if not DATABASE_URL: return
     conn=get_conn(); cur=conn.cursor()
     cur.execute("CREATE TABLE IF NOT EXISTS users (uid TEXT PRIMARY KEY, data JSONB);")
     cur.execute("CREATE TABLE IF NOT EXISTS traders (trader_id TEXT PRIMARY KEY, click_id TEXT);")
     conn.commit(); cur.close(); conn.close()
-
 def load():
     if not DATABASE_URL:
         if os.path.exists(DATA_FILE):
@@ -85,7 +138,6 @@ def load():
         cur.close(); conn.close()
         return {uid: data for uid, data in rows}
     except: return {}
-
 def save():
     if not DATABASE_URL:
         try:
@@ -98,7 +150,6 @@ def save():
             cur.execute("INSERT INTO users(uid,data) VALUES(%s,%s) ON CONFLICT(uid) DO UPDATE SET data=%s", (uid, json.dumps(data), json.dumps(data)))
         conn.commit(); cur.close(); conn.close()
     except: pass
-
 def load_traders():
     if not DATABASE_URL:
         if os.path.exists(TRADERS_FILE):
@@ -113,7 +164,6 @@ def load_traders():
         cur.close(); conn.close()
         return {tid: cid for tid, cid in rows}
     except: return {}
-
 def save_traders():
     if not DATABASE_URL:
         try:
@@ -163,7 +213,6 @@ def get_binance_price(pair):
         b=base.get(base_symbol,1.10)
         return round(b+random.uniform(-0.0015,0.0015),5)
     except: return None
-
 def get_real_price_twelvedata(pair):
     base_symbol=pair.replace(" OTC","").strip(); clean_noslash=base_symbol.replace("/",""); now_ts=time.time()
     if clean_noslash in PRICE_CACHE and now_ts-PRICE_CACHE[clean_noslash][0]<60: return PRICE_CACHE[clean_noslash][1]
@@ -177,7 +226,6 @@ def get_real_price_twelvedata(pair):
     if fb: PRICE_CACHE[clean_noslash]=(now_ts,fb); return fb
     base={"EURUSD":1.08,"GBPUSD":1.26,"USDJPY":155.0,"AUDUSD":0.66,"USDCAD":1.36,"USDCHF":0.90,"NZDUSD":0.61,"EURJPY":168.0,"EURGBP":0.85,"GBPJPY":197.0,"BTCUSD":67000,"ETHUSD":3500}
     b=base.get(clean_noslash,1.10); fallback=round(b+random.uniform(-0.002,0.002),5); PRICE_CACHE[clean_noslash]=(now_ts,fallback); return fallback
-
 def check_3_indicators_logic(rsi, price, ema200, stoch):
     ema_sig="BULLISH 🔼" if price>ema200 else "BEARISH 🔽"
     if rsi<45 and "BULLISH" in ema_sig and stoch<45: return "BUY 📈","STRONG TRIPLE BUY 🔼🔼🔼","OVERSOLD",ema_sig,"OVERSOLD",85
@@ -187,7 +235,6 @@ def check_3_indicators_logic(rsi, price, ema200, stoch):
     if bears>=2: return "SELL 📉",f"Strong Double SELL 🔽🔽 ({bears}/3)","BEARISH",ema_sig,"BEARISH",78
     if rsi<50: return "BUY 📈","Single BUY 🔼","NEUTRAL",ema_sig,"NEUTRAL",65
     else: return "SELL 📉","Single SELL 🔽","NEUTRAL",ema_sig,"NEUTRAL",65
-
 def gen_signal_manual(pair, expiry="M3"):
     price=get_real_price_twelvedata(pair); ema200=price+random.uniform(-0.008,0.008); rsi=random.randint(18,82); stoch=random.randint(10,90)
     direction, strength, rsi_sig, ema_sig, stoch_sig, conf=check_3_indicators_logic(rsi, price, ema200, stoch)
@@ -201,7 +248,7 @@ def gen_signal_auto_strong(market_pairs):
 
 @app.route("/")
 def home():
-    return f"WW POCKET SIGNALS V17 DATABASE + UNLOCK + FEEDBACK {PROMO_CODE} 60% RUNNING 🚀 - PORT {os.environ.get('PORT', 8080)} OK"
+    return f"WW POCKET SIGNALS V18 POSTER + GRID + CHANNEL FIX {PROMO_CODE} 60% RUNNING 🚀 - PORT {os.environ.get('PORT', 8080)} OK"
 
 @app.route("/postback", methods=["GET","POST"])
 def postback():
@@ -212,7 +259,6 @@ def postback():
     except:
         raw={}
     secret=data.get("secret") or data.get("pass") or data.get("password") or raw.get("secret") or ""
-    # ✅ FINAL: ONLY click_id priority, but accept old params as backup
     click_id=data.get("click_id") or data.get("sub_id1") or data.get("subid") or data.get("sub_id") or raw.get("click_id") or raw.get("sub_id1") or raw.get("subid") or ""
     trader_id=data.get("trader_id") or data.get("TraderID") or data.get("trader") or raw.get("trader_id") or ""
     sumdep=data.get("sumdep") or data.get("SumDeposits") or data.get("deposit") or data.get("amount") or raw.get("sumdep") or "0"
@@ -222,14 +268,11 @@ def postback():
             return f"Unauthorized secret={secret}",401
     try: dep=float(sumdep or 0)
     except: dep=0.0
-
-    # ✅ AUTO UPGRADE FIX: If click_id empty but trader_id already mapped (manual unlock used), lookup!
     if not click_id and trader_id:
         tid=str(trader_id)
         if tid in TRADERS:
-            click_id=TRADERS[tid] # Found Telegram ID from manual unlock!
-            print(f"🔄 FOUND via TRADERS mapping: trader_id={tid} -> click_id={click_id}")
-
+            click_id=TRADERS[tid]
+            print(f"FOUND via TRADERS mapping: trader_id={tid} -> click_id={click_id}")
     if trader_id and not click_id:
         TRADERS[str(trader_id)]=f"AFFILIATE_{str(trader_id)}"
         save_traders()
@@ -241,7 +284,6 @@ def postback():
         save_traders()
     u=get_user(str(click_id))
     old_dep=float(u.get("deposit",0) or 0)
-    # Auto Unlock
     if u.get("level","LOCKED")=="LOCKED":
         if trader_id or event=="reg" or dep==0:
             u["level"]="NONE"
@@ -255,7 +297,6 @@ def postback():
                 u["level"]="NONE"
             if trader_id:
                 u["pocket_id"]=str(trader_id)
-    # ✅ Auto Upgrade even if unlocked via button
     if dep>0:
         total_dep=max(old_dep, dep)
         if old_dep>0 and dep>old_dep:
@@ -286,37 +327,70 @@ def main_menu(uid):
     if lvl=="LOCKED":
         kb.add(types.InlineKeyboardButton(f"🎯 Register + Promo {PROMO_CODE} 60% 🎁", url=get_affiliate_link(uid)))
         kb.add(types.InlineKeyboardButton("🔓 I Registered Outside - Unlock Bot 🔓", callback_data="unlock_check"))
-        kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
-        kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
-        kb.add(types.InlineKeyboardButton("💬 Feedback 📩", url="https://t.me/Wwpocketsignalsfeedback"))
+        if is_button_active("login"):
+            kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
+        if is_button_active("channel"):
+            kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
+        if is_button_active("feedback"):
+            kb.add(types.InlineKeyboardButton("💬 Feedback 📩", url=FEEDBACK_URL))
         return kb
-    kb.add(types.InlineKeyboardButton("📊 GET SIGNAL 🚀", callback_data="get_signal"))
-    kb.add(types.InlineKeyboardButton("💎 Upgrade 💰", callback_data="upgrade"), types.InlineKeyboardButton("💰 Deposit 🔥", callback_data="deposit"))
-    kb.add(types.InlineKeyboardButton("📈 My Status 📊", callback_data="status"), types.InlineKeyboardButton("📚 How it Works 📖", callback_data="how"))
-    kb.add(types.InlineKeyboardButton("💬 Feedback 📩", url="https://t.me/Wwpocketsignalsfeedback"))
-    kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL), types.InlineKeyboardButton("📢 Channel", url=TELEGRAM_CHANNEL))
+    if is_button_active("get_signal"):
+        kb.add(types.InlineKeyboardButton("📊 GET SIGNAL 🚀", callback_data="get_signal"))
+    row2=[]
+    if is_button_active("upgrade"):
+        row2.append(types.InlineKeyboardButton("💎 Upgrade 💰", callback_data="upgrade"))
+    if is_button_active("deposit"):
+        row2.append(types.InlineKeyboardButton("💰 Deposit 🔥", callback_data="deposit"))
+    if row2: kb.add(*row2)
+    row3=[]
+    if is_button_active("status"):
+        row3.append(types.InlineKeyboardButton("📈 My Status 📊", callback_data="status"))
+    if is_button_active("how"):
+        row3.append(types.InlineKeyboardButton("📚 How it Works 📖", callback_data="how"))
+    if row3: kb.add(*row3)
+    if is_button_active("feedback"):
+        kb.add(types.InlineKeyboardButton("💬 Feedback 📩", url=FEEDBACK_URL))
+    bottom=[]
+    if is_button_active("login"):
+        bottom.append(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
+    if is_button_active("channel"):
+        bottom.append(types.InlineKeyboardButton("📢 Channel", url=TELEGRAM_CHANNEL))
+    if bottom:
+        kb.add(*bottom)
     if str(uid)==OWNER_ID:
         kb.add(types.InlineKeyboardButton("👑 Admin Panel ⚙️", callback_data="admin"))
     return kb
 
 def market_menu():
     kb=types.InlineKeyboardMarkup(row_width=2)
-    kb.add(types.InlineKeyboardButton("🌞 REAL 30 (24/5)", callback_data="market_REAL"), types.InlineKeyboardButton("🌙 OTC 45 (24/7)", callback_data="market_OTC"))
+    if is_button_active("market"):
+        kb.add(types.InlineKeyboardButton("🌞 REAL 30 (24/5)", callback_data="market_REAL"), types.InlineKeyboardButton("🌙 OTC 45 (24/7)", callback_data="market_OTC"))
+    else:
+        kb.add(types.InlineKeyboardButton("🚧 Market Under Maintenance", callback_data="market_maint"))
     kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
     return kb
 
 def mode_menu(market):
     kb=types.InlineKeyboardMarkup(row_width=2)
-    kb.add(types.InlineKeyboardButton("🎯 Manual Mode ✋", callback_data=f"mode_MANUAL_{market}"), types.InlineKeyboardButton("🤖 Auto Hunt Strong 🔍", callback_data=f"mode_AUTO_{market}"))
+    if is_button_active("mode"):
+        kb.add(types.InlineKeyboardButton("🎯 Manual Mode ✋", callback_data=f"mode_MANUAL_{market}"), types.InlineKeyboardButton("🤖 Auto Hunt Strong 🔍", callback_data=f"mode_AUTO_{market}"))
     kb.add(types.InlineKeyboardButton("⬅️ Back", callback_data="get_signal"))
     return kb
 
 def pairs_keyboard(market, page=0, expiry="M3"):
+    # FIXED: BOTH VERTICAL + HORIZONTAL GRID 3 COLUMNS
     pairs=PAIRS_REAL if market=="REAL" else PAIRS_OTC
-    start=page*10; end=start+10
-    kb=types.InlineKeyboardMarkup(row_width=2)
+    per_page=12  # 3 columns x 4 rows = grid
+    start=page*per_page; end=start+per_page
+    kb=types.InlineKeyboardMarkup(row_width=3)
+    row=[]
     for p in pairs[start:end]:
-        kb.add(types.InlineKeyboardButton(p, callback_data=f"pick_{market}_{p}_{expiry}"))
+        row.append(types.InlineKeyboardButton(p, callback_data=f"pick_{market}_{p}_{expiry}"))
+        if len(row)==3:
+            kb.add(*row)
+            row=[]
+    if row:
+        kb.add(*row)
     nav=[]
     if page>0: nav.append(types.InlineKeyboardButton("⬅️ Prev", callback_data=f"pairs_{market}_{page-1}_{expiry}"))
     if end<len(pairs): nav.append(types.InlineKeyboardButton("Next ➡️", callback_data=f"pairs_{market}_{page+1}_{expiry}"))
@@ -342,9 +416,12 @@ def start(m):
         kb=types.InlineKeyboardMarkup(row_width=1)
         kb.add(types.InlineKeyboardButton(f"🔗 Register + Promo {PROMO_CODE} (60% Bonus) 🎁", url=get_affiliate_link(uid)))
         kb.add(types.InlineKeyboardButton("🔓 I Registered Outside - Unlock Bot 🔓", callback_data="unlock_check"))
-        kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
-        kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
-        kb.add(types.InlineKeyboardButton("💬 Feedback 📩", url="https://t.me/Wwpocketsignalsfeedback"))
+        if is_button_active("login"):
+            kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
+        if is_button_active("channel"):
+            kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
+        if is_button_active("feedback"):
+            kb.add(types.InlineKeyboardButton("💬 Feedback 📩", url=FEEDBACK_URL))
         msg=bot.send_message(m.chat.id, txt, reply_markup=kb)
     else:
         txt=f"👋 Welcome {u['first_name']}! {u['level']} 💹\n📊 Used: {u['used_today']}\nREAL 30 + OTC 45 + 3 Indicators 📈\n🎁 Promo Code: {PROMO_CODE} for 60% Bonus!"
@@ -520,7 +597,7 @@ def cb(c):
     uid=str(c.from_user.id); u=get_user(uid); chat_id=c.message.chat.id
     if u.get("banned") and uid!=OWNER_ID:
         bot.answer_callback_query(c.id,"🚫 You are banned!"); return
-    btn_check_map = {"get_signal": "get_signal","upgrade": "upgrade","deposit": "deposit","status": "status","how": "how","market_REAL": "market","market_OTC": "market","mode_MANUAL": "mode","mode_AUTO": "mode"}
+    btn_check_map = {"get_signal": "get_signal","upgrade": "upgrade","deposit": "deposit","status": "status","how": "how","market_REAL": "market","market_OTC": "market","mode_MANUAL": "mode","mode_AUTO": "mode","pairs_": "pairs"}
     for key_prefix, btn_key in btn_check_map.items():
         if c.data.startswith(key_prefix):
             if not is_button_active(btn_key):
@@ -545,7 +622,8 @@ def cb(c):
             kb=types.InlineKeyboardMarkup(row_width=1)
             kb.add(types.InlineKeyboardButton(f"🎁 Register with Promo {PROMO_CODE} - 60% Bonus 🔥", url=get_affiliate_link(uid)))
             kb.add(types.InlineKeyboardButton("🔓 I Registered Outside - Unlock Bot 🔓", callback_data="unlock_check"))
-            kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL)); kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
+            if is_button_active("login"): kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
+            if is_button_active("channel"): kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
             kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
             msg=bot.send_message(chat_id, f"🔒 You are LOCKED!\n👉 Register via Official Link to unlock 5 free signals per day 🎯\n🎁 Promo {PROMO_CODE} for 60% Bonus!", reply_markup=kb)
             LAST_BOT_MSG[uid]=[msg.message_id]; return
@@ -554,6 +632,8 @@ def cb(c):
             msg=bot.send_message(chat_id, f"🔒 Daily limit {lim} reached! Upgrade to VIP! 💎\n🎁 Promo {PROMO_CODE} 60%", reply_markup=main_menu(uid)); LAST_BOT_MSG[uid]=[msg.message_id]; return
         msg=bot.send_message(chat_id, "📊 Select Market:", reply_markup=market_menu()); LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data.startswith("market_"):
+        if "maint" in c.data:
+            bot.answer_callback_query(c.id, "🚧 Market under maintenance", show_alert=True); return
         if not is_button_active("market"):
             bot.answer_callback_query(c.id, "🚧 Market under maintenance", show_alert=True); bot.send_message(chat_id, get_maintenance_msg()); return
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id); market=c.data.split("_")[1]
@@ -572,7 +652,12 @@ def cb(c):
             pair, direction, strength, rsi, ema_sig, stoch, price, conf, expiry=gen_signal_auto_strong(market_pairs); market_name="REAL 30 (24/5) 🌞" if market=="REAL" else "OTC 45 (24/7) 🌙"; acc=f"{conf-5}-{conf}%" if conf<85 else "80-87%"; u["used_today"]+=1; save()
             kb=types.InlineKeyboardMarkup(row_width=2); kb.add(types.InlineKeyboardButton("✅ WIN 🎉", callback_data=f"win_{pair}"), types.InlineKeyboardButton("❌ LOSS 💔", callback_data=f"loss_{pair}")); kb.add(types.InlineKeyboardButton("📊 Next Signal 🚀", callback_data="get_signal"), types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
             txt=f"🎯 AUTO STRONG SIGNAL 🤖\n\n💱 Pair: {pair}\n📊 Market: {market_name}\n💹 Real Price: {price} 💰\n🔮 Direction: {direction}\n⏰ Expiry: {expiry}\n📈 RSI({rsi}) | EMA200: {ema_sig} | Stoch: {stoch}\n💪 Strength: {strength}\n🎯 Accuracy: {acc} ✅\n🔥 Level: {u['level']} 👑\n\n⚠️ Trade on Pocket Option 💰\n🎁 Promo: {PROMO_CODE} 60%"
-            msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]
+            poster = generate_signal_poster(pair, direction, price, strength, expiry, acc, market_name, u['level'])
+            if poster:
+                msg=bot.send_photo(chat_id, poster, caption=txt, reply_markup=kb)
+            else:
+                msg=bot.send_message(chat_id, txt, reply_markup=kb)
+            LAST_BOT_MSG[uid]=[msg.message_id]
         return
     if c.data.startswith("pairs_"):
         _, market, page, expiry=c.data.split("_"); try_delete(chat_id, c.message.message_id)
@@ -581,12 +666,19 @@ def cb(c):
         _, market, page, expiry=c.data.split("_"); try_delete(chat_id, c.message.message_id)
         msg=bot.send_message(chat_id, f"Expiry set to {expiry}", reply_markup=pairs_keyboard(market,int(page),expiry)); LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data.startswith("pick_"):
+        if not is_button_active("pairs"):
+            bot.answer_callback_query(c.id, "🚧 Pairs under maintenance", show_alert=True); bot.send_message(chat_id, get_maintenance_msg()); return
         _, market, pair_part, expiry=c.data.split("_",3); pair=pair_part; clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id); market_name="REAL 30 (24/5) 🌞" if market=="REAL" else "OTC 45 (24/7) 🌙"
         p, direction, strength, rsi, ema_sig, stoch, price, conf, exp=gen_signal_manual(pair, expiry); acc=f"{conf-5}-{conf}%" if conf<85 else "80-87%"; u["used_today"]+=1; save()
         kb=types.InlineKeyboardMarkup(row_width=2); kb.add(types.InlineKeyboardButton("✅ WIN 🎉", callback_data=f"win_{pair}"), types.InlineKeyboardButton("❌ LOSS 💔", callback_data=f"loss_{pair}")); kb.add(types.InlineKeyboardButton("📊 Next Signal 🚀", callback_data="get_signal"), types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
         txt=f"🎯 MANUAL SIGNAL - 3 Indicators 📈\n\n💱 Pair: {p}\n📊 Market: {market_name}\n💹 Real Price: {price} 💰\n🔮 Direction: {direction}\n⏰ Expiry: {expiry}\n📈 RSI({rsi}) | EMA200: {ema_sig} | Stoch: {stoch}\n💪 Strength: {strength}\n🎯 Accuracy: {acc} ({conf}% Conf) ✅\n🔥 Level: {u['level']} 👑\n\n⚠️ Trade on Pocket Option 💰\n⏰ Valid 1-2 min ⏳\n🎁 Promo: {PROMO_CODE} 60%"
-        msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
-    if c.data.startswith("win_") or c.data.startswith("loss_"):
+        poster = generate_signal_poster(p, direction, price, strength, expiry, acc, market_name, u['level'])
+        if poster:
+            msg=bot.send_photo(chat_id, poster, caption=txt, reply_markup=kb)
+        else:
+            msg=bot.send_message(chat_id, txt, reply_markup=kb)
+        LAST_BOT_MSG[uid]=[msg.message_id]; return
+        if c.data.startswith("win_") or c.data.startswith("loss_"):
         is_win=c.data.startswith("win_"); clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         if is_win:
             u["daily_w"]+=1;u["total_w"]+=1;u["streak"]+=1;u["loss_streak"]=0
@@ -617,7 +709,12 @@ def cb(c):
             bot.answer_callback_query(c.id, "🚧 Deposit under maintenance", show_alert=True); bot.send_message(chat_id, get_maintenance_msg()); return
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         txt=f"💰 DEPOSIT PAGE 💳\n\n🎁 PROMO CODE: {PROMO_CODE} = 60% Bonus!\nYour Level: {u['level']} | Deposit: ${u['deposit']}"
-        kb=types.InlineKeyboardMarkup(row_width=1); kb.add(types.InlineKeyboardButton("💰 Deposit Direct + 60% Bonus 🔥", url=DEPOSIT_DIRECT)); kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL)); kb.add(types.InlineKeyboardButton(f"🎁 Promo: {PROMO_CODE} 60%", url=DEPOSIT_DIRECT)); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
+        kb=types.InlineKeyboardMarkup(row_width=1)
+        if is_button_active("deposit_direct"):
+            kb.add(types.InlineKeyboardButton("💰 Deposit Direct + 60% Bonus 🔥", url=DEPOSIT_DIRECT))
+        if is_button_active("login"):
+            kb.add(types.InlineKeyboardButton("🔐 LOGIN", url=LOGIN_URL))
+        kb.add(types.InlineKeyboardButton(f"🎁 Promo: {PROMO_CODE} 60%", url=DEPOSIT_DIRECT)); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
         msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data=="upgrade":
         if not is_button_active("upgrade"):
@@ -625,13 +722,21 @@ def cb(c):
         clean_old(chat_id, uid); try_delete(chat_id, c.message.message_id)
         if u["level"]=="VIP":
             txt=f"👑 YOU ARE VIP BOSS! 💎🎉\nYOU HAVE UNLIMITED POWER! 🚀\nYour Level: VIP | Deposit: ${u['deposit']}\n🎁 Promo {PROMO_CODE} 60% Bonus!"
-            kb=types.InlineKeyboardMarkup(row_width=1); kb.add(types.InlineKeyboardButton("💰 Add More Balance 🔥", url=DEPOSIT_DIRECT)); kb.add(types.InlineKeyboardButton("📊 Get VIP Signals 🚀", callback_data="get_signal")); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
+            kb=types.InlineKeyboardMarkup(row_width=1)
+            if is_button_active("deposit_direct"):
+                kb.add(types.InlineKeyboardButton("💰 Add More Balance 🔥", url=DEPOSIT_DIRECT))
+            kb.add(types.InlineKeyboardButton("📊 Get VIP Signals 🚀", callback_data="get_signal")); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
         else:
             txt=f"💎 YOUR PATH TO BOSS MODE 🚀\n🎁 PROMO CODE: {PROMO_CODE} = 60% BONUS!\nYour Level: {u['level']} Deposit: ${u['deposit']}"
             kb=types.InlineKeyboardMarkup(row_width=1)
-            if u["level"]!="LOCKED": kb.add(types.InlineKeyboardButton("💰 Deposit Now + 60% Bonus 🔥", url=DEPOSIT_DIRECT))
+            if u["level"]!="LOCKED":
+                if is_button_active("deposit_direct"):
+                    kb.add(types.InlineKeyboardButton("💰 Deposit Now + 60% Bonus 🔥", url=DEPOSIT_DIRECT))
             else: kb.add(types.InlineKeyboardButton(f"🎯 Register + Promo {PROMO_CODE} 60%", url=get_affiliate_link(uid)))
-            kb.add(types.InlineKeyboardButton("💪 LEVEL UP STARTER - 4X Power ($20+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else get_affiliate_link(uid))); kb.add(types.InlineKeyboardButton("💵 GO PRO - 20X Power ($50+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else get_affiliate_link(uid))); kb.add(types.InlineKeyboardButton("👑 BECOME VIP BOSS - ∞ Power ($100+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else get_affiliate_link(uid))); kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL)); kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
+            kb.add(types.InlineKeyboardButton("💪 LEVEL UP STARTER - 4X Power ($20+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else get_affiliate_link(uid))); kb.add(types.InlineKeyboardButton("💵 GO PRO - 20X Power ($50+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else get_affiliate_link(uid))); kb.add(types.InlineKeyboardButton("👑 BECOME VIP BOSS - ∞ Power ($100+)", url=DEPOSIT_DIRECT if u["level"]!="LOCKED" else get_affiliate_link(uid)))
+            if is_button_active("channel"):
+                kb.add(types.InlineKeyboardButton("📢 Telegram Channel", url=TELEGRAM_CHANNEL))
+            kb.add(types.InlineKeyboardButton("➡️ Menu", callback_data="menu"))
         msg=bot.send_message(chat_id, txt, reply_markup=kb); LAST_BOT_MSG[uid]=[msg.message_id]; return
     if c.data=="admin":
         if uid!=OWNER_ID: return
@@ -650,7 +755,7 @@ def cb(c):
             status = "✅ ON" if is_active else "❌ OFF"
             kb.add(types.InlineKeyboardButton(f"{btn_name.upper()} - {status}", callback_data=f"toggle_{btn_name}"))
         kb.add(types.InlineKeyboardButton("⬅️ Back to Admin", callback_data="admin"))
-        bot.send_message(chat_id, f"🔧 BUTTON CONTROLLER\n\nCurrent Promo: {PROMO_CODE}\n\nClick to ON/OFF any user button.\nIf OFF, user will see maintenance message.\n\n🔔 You will get notification popup when toggling.", reply_markup=kb)
+        bot.send_message(chat_id, f"🔧 BUTTON CONTROLLER V18\n\nCurrent Promo: {PROMO_CODE}\n\nClick to ON/OFF any user button.\nIf OFF, user will see maintenance message.\n\n✅ Includes CHANNEL, LOGIN, FEEDBACK now! 🔔", reply_markup=kb)
         bot.answer_callback_query(c.id); try_delete(chat_id, c.message.message_id); return
     if c.data.startswith("toggle_"):
         if uid!=OWNER_ID: return
@@ -729,7 +834,7 @@ def cb(c):
 def broadcast_content(m):
     uid=str(m.from_user.id); ws=WAIT_STATE.get(uid)
 
-    # ✅ NEW: PROMO CODE CHANGE HANDLER
+    # PROMO CODE CHANGE HANDLER
     if ws and ws.get("step")=="admin_change_promo" and uid==OWNER_ID:
         if m.text.strip().lower()=="/cancel":
             WAIT_STATE.pop(uid,None)
@@ -753,13 +858,12 @@ def broadcast_content(m):
         if not trader_id_input:
             bot.send_message(m.chat.id, "❌ Invalid ID! Send numbers only e.g. 12345678")
             return
-        # ✅ Check if verified in TRADERS (from postback)
         if trader_id_input in TRADERS:
             u = get_user(uid)
             u["level"]="NONE"
             u["pocket_id"]=trader_id_input
             if u.get("deposit",0)==0: u["deposit"]=0
-            TRADERS[trader_id_input]=uid # ✅ Ensure mapping = Telegram ID for future deposits!
+            TRADERS[trader_id_input]=uid
             save(); save_traders()
             kb=types.InlineKeyboardMarkup(row_width=1)
             kb.add(types.InlineKeyboardButton("📊 Get Signals 🚀", callback_data="get_signal"))
@@ -898,7 +1002,7 @@ if __name__=="__main__":
         pass
     threading.Thread(target=daily_reset_loop, daemon=True).start()
     threading.Thread(target=run_flask, daemon=True).start()
-    print(f"🚀 WW POCKET BOT V17 FINAL click_id ONLY + AUTO UPGRADE AFTER UNLOCK RUNNING PROMO {PROMO_CODE} 60% 🔥 PORT {os.environ.get('PORT', 8080)}")
+    print(f"🚀 WW POCKET BOT V18 POSTER + GRID + CHANNEL FIX RUNNING PROMO {PROMO_CODE} 60% 🔥 PORT {os.environ.get('PORT', 8080)}")
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
