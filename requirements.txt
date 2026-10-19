@@ -2,3 +2,4 @@ pyTelegramBotAPI
 Flask
 requests
 psycopg2-binary
+Pillow
